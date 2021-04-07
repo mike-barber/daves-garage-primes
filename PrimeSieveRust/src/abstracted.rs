@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use primes::{FlagStorage, FlagStorageBitVector, FlagStorageByteVector, PrimeSieve};
+use primes::{FlagStorage, FlagStorageBitStriped, FlagStorageBitVector, FlagStorageByteVector, PrimeSieve};
 
 pub mod primes {
     use std::{collections::HashMap, time::Duration, usize};
@@ -57,13 +57,12 @@ pub mod primes {
     }
 
     /// Storage using a simple vector of bytes.
-    /// Doing the same with bools is equivalent, as bools are currently 
-    /// represented as bytes in Rust. However, this is not guaranteed to 
-    /// remain so for all time. To ensure consistent memory use in the future, 
+    /// Doing the same with bools is equivalent, as bools are currently
+    /// represented as bytes in Rust. However, this is not guaranteed to
+    /// remain so for all time. To ensure consistent memory use in the future,
     /// we're explicitly using bytes (u8) here.
     pub struct FlagStorageByteVector(Vec<u8>);
-    impl FlagStorage for FlagStorageByteVector
-    {
+    impl FlagStorage for FlagStorageByteVector {
         fn create_true(size: usize) -> Self {
             FlagStorageByteVector(vec![1; size])
         }
@@ -122,6 +121,61 @@ pub mod primes {
             let word = self.words.get(index / U8_BITS).unwrap();
             *word & (1 << (index % U8_BITS)) != 0
         }
+    }
+
+    pub struct FlagStorageBitStriped {
+        words: Vec<u8>,
+        length_bits: usize,
+    }
+
+    impl FlagStorage for FlagStorageBitStriped {
+        fn create_true(size: usize) -> Self {
+            let num_words = size / U8_BITS + (size % U8_BITS).min(1);
+            FlagStorageBitStriped {
+                words: vec![0xff; num_words],
+                length_bits: size,
+            }
+        }
+
+        fn reset_flags(&mut self, start: usize, skip: usize) {
+            let chunk = self.words.len();
+            for bit in 0..8 {
+                // get mask for this bit position
+                let mask = !(1_u8 << bit);
+
+                // calculate start word for this stripe
+                let chunk_start = bit * chunk;
+                let earliest = start.max(chunk_start);
+                let diff = earliest as isize - start as isize;
+                let relative = ceiling(diff, skip as isize) * skip as isize;
+                let chunk_start = relative as usize + start - chunk_start;
+
+                // for larger `skips`, not every bit will have any corresponding words
+                // take slice starting here, and reset the bit in every `skip`th word
+                if chunk_start < chunk {
+                    let slice = &mut self.words[chunk_start..];
+                    let mut i = 0;
+                    while i < slice.len() {
+                        slice[i] &= mask;
+                        i += skip;
+                    }
+                }
+            }
+        }
+
+        fn get(&self, index: usize) -> bool {
+            if index > self.length_bits {
+                return false;
+            }
+            let word_index = index % self.words.len();
+            let bit_index = index / self.words.len();
+            let word = self.words.get(word_index).unwrap();
+            *word & (1 << bit_index) != 0
+        }
+    }
+
+    fn ceiling(numerator: isize, denominator: isize) -> isize {
+        (numerator + denominator - 1) / denominator
     }
 
     pub struct PrimeSieve<T: FlagStorage> {
@@ -209,8 +263,11 @@ pub mod primes {
 }
 
 fn main() {
-    print!("Bit storage:   ");
+    print!("Bit simple:    ");
     run_implementation::<FlagStorageBitVector>();
+
+    print!("Bit striped:   ");
+    run_implementation::<FlagStorageBitStriped>();
 
     print!("Byte storage:  ");
     run_implementation::<FlagStorageByteVector>();
@@ -244,12 +301,18 @@ fn run_implementation<T: FlagStorage>() {
 mod tests {
     use super::*;
     use crate::primes::{
-        FlagStorage, FlagStorageBitVector, FlagStorageByteVector, PrimeSieve, PrimeValidator,
+        FlagStorage, FlagStorageBitStriped, FlagStorageBitVector, FlagStorageByteVector,
+        PrimeSieve, PrimeValidator,
     };
 
     #[test]
     fn sieve_known_correct_bits() {
         sieve_known_correct::<FlagStorageBitVector>();
+    }
+
+    #[test]
+    fn sieve_known_correct_bits_striped() {
+        sieve_known_correct::<FlagStorageBitStriped>();
     }
 
     #[test]
@@ -259,15 +322,21 @@ mod tests {
 
     fn sieve_known_correct<T: FlagStorage>() {
         let validator = PrimeValidator::default();
-        for (sieve_size, expected_primes) in validator.known_results().iter() {
+
+        let mut known_primes: Vec<_> = validator.known_results().keys().collect();
+        known_primes.sort();
+
+        for sieve_size in known_primes {
+            let expected = validator.known_results().get(sieve_size).unwrap();
             let mut sieve: PrimeSieve<T> = primes::PrimeSieve::new(*sieve_size);
             sieve.run_sieve();
             assert_eq!(
-                *expected_primes,
+                *expected,
                 sieve.count_primes(),
                 "wrong number of primes for sieve = {}",
                 sieve_size
             );
         }
-    }
+   }
+
 }
