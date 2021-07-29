@@ -14,7 +14,7 @@ namespace Solution4
         {
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
-            for (var i = 0; i < 2; ++i)
+            for (var i = 0; i < 3; ++i)
                 RunSingleThreaded();
 
             for (var i = 0; i < 3; ++i)
@@ -27,7 +27,7 @@ namespace Solution4
         {
             foreach (var size in KnownPrimes.KnownSizes)
             {
-                var sieve = new PrimeSieve(size);
+                using var sieve = new PrimeSieve(size);
                 sieve.RunSieve();
                 Trace.Assert(sieve.IsValid);
                 Console.Error.WriteLine($"Sieve passed test: {size}");
@@ -42,13 +42,13 @@ namespace Solution4
             var count = 0;
             while (sw.ElapsedTicks < stopTicks)
             {
-                var sieve = new PrimeSieve(_sieveSize);
+                using var sieve = new PrimeSieve(_sieveSize);
                 sieve.RunSieve();
                 ++count;
             }
             sw.Stop();
 
-            var modelSieve = new PrimeSieve(_sieveSize);
+            using var modelSieve = new PrimeSieve(_sieveSize);
             modelSieve.RunSieve();
             PrintReport("st", modelSieve, 1, sw.ElapsedMilliseconds / 1000.0, count);
         }
@@ -69,7 +69,7 @@ namespace Solution4
                     var localCount = 0;
                     while (sw.ElapsedTicks < stopTicks)
                     {
-                        var sieve = new PrimeSieve(_sieveSize);
+                        using var sieve = new PrimeSieve(_sieveSize);
                         sieve.RunSieve();
                         ++localCount;
                     }
@@ -81,7 +81,7 @@ namespace Solution4
             sw.Stop();
             var count = tasks.Select(t => t.GetAwaiter().GetResult()).Sum();
 
-            var modelSieve = new PrimeSieve(_sieveSize);
+            using var modelSieve = new PrimeSieve(_sieveSize);
             modelSieve.RunSieve();
             PrintReport("mt", modelSieve, numThreads, sw.ElapsedMilliseconds / 1000.0, count);
         }

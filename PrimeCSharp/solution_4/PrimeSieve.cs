@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Solution4
 {
-    public class PrimeSieve
+    public class PrimeSieve : IDisposable
     {
         const int _divide = 5; // 2^5 == 32 
 
@@ -16,14 +17,15 @@ namespace Solution4
         readonly int _numBits;
         readonly uint[] _words;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public PrimeSieve(int size)
         {
             _sieveSize = size;
             _numBits = (size + 1) / 2;
 
             var numWords = _numBits / sizeof(uint) + 1;
-            _words = new uint[numWords];
-            // TODO: IntPtr ptr = Marshal.AllocHGlobal(..); .. Marshal.FreeHGlobal(hglobal)
+            _words = ArrayPool<uint>.Shared.Rent(numWords);
+            _words.AsSpan(0, numWords).Clear();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -32,7 +34,7 @@ namespace Solution4
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void RunSieve()
         {
-            var q = (int)Math.Sqrt(this._sieveSize);
+            var q = (int)Math.Sqrt(_sieveSize);
 
             var factor = 3;
             while (factor <= q)
@@ -98,9 +100,13 @@ namespace Solution4
             }
             return count;
         }
-
+        
         public bool IsValid => KnownPrimes.IsValid(_sieveSize, CountPrimes());
 
-        // TODO: implement IDisposable.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Dispose()
+        {
+            ArrayPool<uint>.Shared.Return(_words, false);
+        }
     }
 }
