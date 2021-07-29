@@ -12,6 +12,7 @@ namespace Solution4
     public class PrimeSieve : IDisposable
     {
         const int _divide = 5; // 2^5 == 32 
+        const int _wordBits = sizeof(uint) * 8;
 
         readonly int _sieveSize;
         readonly int _numBits;
@@ -23,7 +24,7 @@ namespace Solution4
             _sieveSize = size;
             _numBits = (size + 1) / 2;
 
-            var numWords = _numBits / sizeof(uint) + 1;
+            var numWords = _numBits / _wordBits + 1;
             _words = ArrayPool<uint>.Shared.Rent(numWords);
             _words.AsSpan(0, numWords).Clear();
         }
@@ -37,10 +38,10 @@ namespace Solution4
             var q = (int)Math.Sqrt(_sieveSize);
 
             var factor = 3;
-            while (factor <= q)
+            while (true)
             {
                 // find next factor - next still-flagged number
-                var index = factor / 2;
+                var index = factor >> 1;
                 while (index < _numBits)
                 {
                     if (GetBit(index))
@@ -49,6 +50,14 @@ namespace Solution4
                     ++index;
                 }
                 factor = index * 2 + 1;
+
+                // check for termination _before_ resetting flags;
+                // note: need to check up to and including q, otherwise we
+                // fail to catch cases like sieve_size = 1000
+                if (factor > q) 
+                {
+                    break;
+                }
 
                 // set bits using unsafe pointer and unrolled loop
                 unsafe
@@ -86,6 +95,7 @@ namespace Solution4
                     }
                 }
 
+                // advance factor
                 factor += 2;
             }
         }
