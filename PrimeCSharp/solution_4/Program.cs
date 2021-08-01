@@ -8,19 +8,22 @@ namespace Solution4
 {
     public class Program
     {
-        const int _sieveSize = 1_000_000;
+        const int _defaultSieveSize = 1_000_000;
 
-        static void Main()
+        async static Task Main()
         {
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-
-            for (var i = 0; i < 3; ++i)
-                RunSingleThreaded();
-
-            for (var i = 0; i < 3; ++i)
-                RunMultiThreaded();
-
             RunTests();
+            Warmup();
+
+            //for (var i = 0; i < 3; ++i)
+            //    RunSingleThreaded(report: true);
+
+            //for (var i = 0; i < 3; ++i)
+            //    await RunMultiThreaded(report: true);
+
+            RunSingleThreaded(_defaultSieveSize, report: true);
+            await RunMultiThreaded(_defaultSieveSize, report: true);
         }
 
         static void RunTests()
@@ -34,7 +37,13 @@ namespace Solution4
             }
         }
 
-        static void RunSingleThreaded()
+        static void Warmup()
+        {
+            Console.Error.WriteLine("Warming up...");
+            RunSingleThreaded(_defaultSieveSize, report: false);
+        }
+
+        static void RunSingleThreaded(int sieveSize, bool report)
         {
             var stopTicks = Stopwatch.Frequency * 5;
             var sw = Stopwatch.StartNew();
@@ -42,18 +51,21 @@ namespace Solution4
             var count = 0;
             while (sw.ElapsedTicks < stopTicks)
             {
-                using var sieve = new PrimeSieve(_sieveSize);
+                using var sieve = new PrimeSieve(sieveSize);
                 sieve.RunSieve();
                 ++count;
             }
             sw.Stop();
 
-            using var modelSieve = new PrimeSieve(_sieveSize);
-            modelSieve.RunSieve();
-            PrintReport("st", modelSieve, 1, sw.ElapsedMilliseconds / 1000.0, count);
+            if (report)
+            {
+                using var modelSieve = new PrimeSieve(sieveSize);
+                modelSieve.RunSieve();
+                PrintReport("st", modelSieve, 1, sw.ElapsedMilliseconds / 1000.0, count);
+            }
         }
 
-        static void RunMultiThreaded()
+        async static Task RunMultiThreaded(int sieveSize, bool report)
         {
             var stopTicks = Stopwatch.Frequency * 5;
             var sw = Stopwatch.StartNew();
@@ -69,7 +81,7 @@ namespace Solution4
                     var localCount = 0;
                     while (sw.ElapsedTicks < stopTicks)
                     {
-                        using var sieve = new PrimeSieve(_sieveSize);
+                        using var sieve = new PrimeSieve(sieveSize);
                         sieve.RunSieve();
                         ++localCount;
                     }
@@ -77,13 +89,16 @@ namespace Solution4
                 });
             }
             // wait for all tasks to complete, then stop the timer and collect counts
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
             sw.Stop();
-            var count = tasks.Select(t => t.GetAwaiter().GetResult()).Sum();
+            var count = tasks.Select(t => t.Result).Sum();
 
-            using var modelSieve = new PrimeSieve(_sieveSize);
-            modelSieve.RunSieve();
-            PrintReport("mt", modelSieve, numThreads, sw.ElapsedMilliseconds / 1000.0, count);
+            if (report)
+            {
+                using var modelSieve = new PrimeSieve(sieveSize);
+                modelSieve.RunSieve();
+                PrintReport("mt", modelSieve, numThreads, sw.ElapsedMilliseconds / 1000.0, count);
+            }
         }
 
 

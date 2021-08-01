@@ -42,11 +42,8 @@ namespace Solution4
             {
                 // find next factor - next still-flagged number
                 var index = factor >> 1;
-                while (index < _numBits)
+                while ((index < _numBits) && !GetBit(index))
                 {
-                    if (GetBit(index))
-                        break;
-
                     ++index;
                 }
                 factor = index * 2 + 1;
@@ -100,6 +97,7 @@ namespace Solution4
             }
         }
 
+        // this does not need to be efficient
         public int CountPrimes()
         {
             int count = 0;
