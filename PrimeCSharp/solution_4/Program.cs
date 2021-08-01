@@ -45,6 +45,8 @@ namespace Solution4
 
         static void RunSingleThreaded(int sieveSize, bool report)
         {
+            // TODO: I think DateTime.UtcNow is actually faster than hitting
+            // Stopwatch repeatedly. Should probably change this.
             var stopTicks = Stopwatch.Frequency * 5;
             var sw = Stopwatch.StartNew();
 
