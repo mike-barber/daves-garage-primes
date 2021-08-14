@@ -241,8 +241,8 @@ pub mod primes {
     /// There is a computation / memory bandwidth tradeoff here. This works well
     /// only for sieves that fit inside the processor cache. For processors with
     /// smaller caches or larger sieves, this algorithm will result in a lot of
-    /// cache thrashing due to multiple passes. It really doesn't work well on something 
-    /// like a raspberry pi. 
+    /// cache thrashing due to multiple passes. It really doesn't work well on something
+    /// like a raspberry pi.
     ///
     /// [`FlagStorageBitVectorStripedBlocks`] takes a more cache-friendly approach.
     pub struct FlagStorageBitVectorStriped {
@@ -320,22 +320,22 @@ pub mod primes {
     /// The striped storage is divided up into smaller blocks, and we do multiple
     /// passes over the smaller block rather than the entire sieve.
     pub struct FlagStorageBitVectorStripedBlocks<const N: usize> {
-        blocks: Vec<[u8; N]>,
+        blocks: Vec<[u32; N]>,
         length_bits: usize,
     }
 
     /// This is the optimal block size for [`FlagStorageBitVectorStriped`] for CPUs
     /// with a fair amount of L1 cache, and works well on AMD Ryzen.
-    pub const BLOCK_SIZE_DEFAULT: usize = 16 * 1024;
+    pub const BLOCK_SIZE_DEFAULT: usize = 16 * 1024 / 4;
 
     /// This is a good block size for [`FlagStorageBitVectorStriped`] for CPUs with
     /// less L1 cache available. It's also useful when running many sieves
     /// in parallel.
-    pub const BLOCK_SIZE_SMALL: usize = 4 * 1024;
+    pub const BLOCK_SIZE_SMALL: usize = 4 * 1024 / 4;
 
     impl<const N: usize> FlagStorageBitVectorStripedBlocks<N> {
         const BLOCK_SIZE: usize = N;
-        const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U8_BITS;
+        const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U32_BITS;
     }
 
     impl<const N: usize> FlagStorage for FlagStorageBitVectorStripedBlocks<N> {
@@ -343,7 +343,7 @@ pub mod primes {
             let num_blocks = size / Self::BLOCK_SIZE_BITS + (size % Self::BLOCK_SIZE_BITS).min(1);
             Self {
                 length_bits: size,
-                blocks: vec![[u8::MAX; N]; num_blocks],
+                blocks: vec![[u32::MAX; N]; num_blocks],
             }
         }
 
@@ -358,7 +358,7 @@ pub mod primes {
             for block_idx in block_idx_start..self.blocks.len() {
                 // Safety: we have ensured the block_idx < length
                 let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
-                while bit_idx < U8_BITS {
+                while bit_idx < U32_BITS {
                     // calculate effective end position: we might have a shorter stripe on the last iteration
                     let stripe_start_position =
                         block_idx * Self::BLOCK_SIZE_BITS + bit_idx * Self::BLOCK_SIZE;
