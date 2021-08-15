@@ -1,0 +1,51 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'prime-sieve-rust'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=prime-sieve-rust",
+                    "--package=prime-sieve-rust"
+                ],
+                "filter": {
+                    "name": "prime-sieve-rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "--threads",
+                "1",
+                "--bits-striped-blocks",
+                "--repetitions",
+                "1"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'prime-sieve-rust'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=prime-sieve-rust",
+                    "--package=prime-sieve-rust"
+                ],
+                "filter": {
+                    "name": "prime-sieve-rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

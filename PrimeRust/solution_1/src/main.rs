@@ -241,8 +241,8 @@ pub mod primes {
     /// There is a computation / memory bandwidth tradeoff here. This works well
     /// only for sieves that fit inside the processor cache. For processors with
     /// smaller caches or larger sieves, this algorithm will result in a lot of
-    /// cache thrashing due to multiple passes. It really doesn't work well on something 
-    /// like a raspberry pi. 
+    /// cache thrashing due to multiple passes. It really doesn't work well on something
+    /// like a raspberry pi.
     ///
     /// [`FlagStorageBitVectorStripedBlocks`] takes a more cache-friendly approach.
     pub struct FlagStorageBitVectorStriped {
@@ -336,19 +336,57 @@ pub mod primes {
     impl<const N: usize> FlagStorageBitVectorStripedBlocks<N> {
         const BLOCK_SIZE: usize = N;
         const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U8_BITS;
-    }
 
-    impl<const N: usize> FlagStorage for FlagStorageBitVectorStripedBlocks<N> {
-        fn create_true(size: usize) -> Self {
-            let num_blocks = size / Self::BLOCK_SIZE_BITS + (size % Self::BLOCK_SIZE_BITS).min(1);
-            Self {
-                length_bits: size,
-                blocks: vec![[u8::MAX; N]; num_blocks],
+        const fn ceiling(numerator: usize, denominator: usize) -> usize {
+            (numerator + denominator - 1) / denominator
+        }
+
+        const fn first_relative_index(block_first_index: usize, start: usize, skip: usize) -> usize {
+            if start > block_first_index {
+                return start;
+            }
+            let ceil = Self::ceiling(block_first_index - start, skip);
+            let absolute = (ceil * skip) + start;
+            let relative = absolute - block_first_index;
+            relative
+        }
+
+        #[inline(always)]
+        fn reset_flags_dense<const SKIP: usize>(&mut self, start: usize) {
+            let block_idx_start = start / Self::BLOCK_SIZE_BITS;
+            for block_idx in block_idx_start..self.blocks.len() {
+                // determine start within block
+                let start =
+                    Self::first_relative_index(block_idx * Self::BLOCK_SIZE_BITS, start, SKIP);
+
+                // Safety: we have ensured the block_idx < length
+                let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
+                // head -- prior to start of repeated section
+                let start_word = start % N;
+                for i in 0..start_word {
+                    block[i] = block_reset_dense::apply_mask(block[i], i, start, SKIP, N);
+                }
+
+                // repeated section: this is the part we want the compiler
+                // to optimise aggressively
+                let mut i = start_word;
+                while i < N - SKIP {
+                    for s in 0..SKIP {
+                        block[i + s] =
+                            block_reset_dense::apply_mask(block[i + s], i + s, start, SKIP, N);
+                    }
+                    i += SKIP;
+                }
+
+                // head -- after end of repeated section
+                for i in (N - SKIP)..N {
+                    block[i] = block_reset_dense::apply_mask(block[i], i, start, SKIP, N);
+                }
             }
         }
 
         #[inline(always)]
-        fn reset_flags(&mut self, start: usize, skip: usize) {
+        fn reset_flags_general(&mut self, start: usize, skip: usize) {
             // determine first block, start bit, and first word
             let block_idx_start = start / Self::BLOCK_SIZE_BITS;
             let offset_idx = start % Self::BLOCK_SIZE_BITS;
@@ -403,6 +441,26 @@ pub mod primes {
                 bit_idx = 0;
             }
         }
+    }
+
+    impl<const N: usize> FlagStorage for FlagStorageBitVectorStripedBlocks<N> {
+        fn create_true(size: usize) -> Self {
+            let num_blocks = size / Self::BLOCK_SIZE_BITS + (size % Self::BLOCK_SIZE_BITS).min(1);
+            Self {
+                length_bits: size,
+                blocks: vec![[u8::MAX; N]; num_blocks],
+            }
+        }
+
+        #[inline(always)]
+        fn reset_flags(&mut self, start: usize, skip: usize) {
+            match skip {
+                3 => self.reset_flags_dense::<3>(start),
+                5 => self.reset_flags_dense::<5>(start),
+                7 => self.reset_flags_dense::<7>(start),
+                _ => self.reset_flags_general(start, skip),
+            }
+        }
 
         #[inline(always)]
         fn get(&self, index: usize) -> bool {
@@ -415,6 +473,39 @@ pub mod primes {
             let word_index = offset % Self::BLOCK_SIZE;
             let word = self.blocks.get(block).unwrap().get(word_index).unwrap();
             *word & (1 << bit_index) != 0
+        }
+    }
+
+    mod block_reset_dense {
+        const fn mask(ix: usize, start: usize, skip: usize) -> u8 {
+            if ix >= start {
+                let rel = ix - start;
+                if rel % skip == 0 {
+                    1
+                } else {
+                    0
+                }
+            } else {
+                0
+            }
+        }
+
+        pub const fn apply_mask(
+            mut word: u8,
+            i: usize,
+            start: usize,
+            skip: usize,
+            words_length: usize,
+        ) -> u8 {
+            word &= !(mask(i + words_length * 0, start, skip) << 0);
+            word &= !(mask(i + words_length * 1, start, skip) << 1);
+            word &= !(mask(i + words_length * 2, start, skip) << 2);
+            word &= !(mask(i + words_length * 3, start, skip) << 3);
+            word &= !(mask(i + words_length * 4, start, skip) << 4);
+            word &= !(mask(i + words_length * 5, start, skip) << 5);
+            word &= !(mask(i + words_length * 6, start, skip) << 6);
+            word &= !(mask(i + words_length * 7, start, skip) << 7);
+            word
         }
     }
 
