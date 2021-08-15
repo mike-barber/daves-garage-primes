@@ -337,9 +337,9 @@ pub mod primes {
         const BLOCK_SIZE: usize = N;
         const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U8_BITS;
 
-        const fn mask(ix: usize, start: usize, skip: usize) -> u8 {
-            if ix >= start {
-                let rel = ix - start;
+        const fn mask(index: usize, start: usize, skip: usize) -> u8 {
+            if index >= start {
+                let rel = index - start;
                 if rel % skip == 0 {
                     1
                 } else {
@@ -350,15 +350,15 @@ pub mod primes {
             }
         }
 
-        const fn apply_mask(mut word: u8, i: usize, start: usize, skip: usize) -> u8 {
-            word &= !(Self::mask(i + N * 0, start, skip) << 0);
-            word &= !(Self::mask(i + N * 1, start, skip) << 1);
-            word &= !(Self::mask(i + N * 2, start, skip) << 2);
-            word &= !(Self::mask(i + N * 3, start, skip) << 3);
-            word &= !(Self::mask(i + N * 4, start, skip) << 4);
-            word &= !(Self::mask(i + N * 5, start, skip) << 5);
-            word &= !(Self::mask(i + N * 6, start, skip) << 6);
-            word &= !(Self::mask(i + N * 7, start, skip) << 7);
+        const fn apply_mask(mut word: u8, index: usize, start: usize, skip: usize) -> u8 {
+            word &= !(Self::mask(index, start, skip));
+            word &= !(Self::mask(index + N, start, skip) << 1);
+            word &= !(Self::mask(index + N * 2, start, skip) << 2);
+            word &= !(Self::mask(index + N * 3, start, skip) << 3);
+            word &= !(Self::mask(index + N * 4, start, skip) << 4);
+            word &= !(Self::mask(index + N * 5, start, skip) << 5);
+            word &= !(Self::mask(index + N * 6, start, skip) << 6);
+            word &= !(Self::mask(index + N * 7, start, skip) << 7);
             word
         }
 
@@ -376,8 +376,7 @@ pub mod primes {
             }
             let ceil = Self::ceiling(block_first_index - start, skip);
             let absolute = (ceil * skip) + start;
-            let relative = absolute - block_first_index;
-            relative
+            absolute - block_first_index // relative position in block
         }
 
         #[inline(always)]
@@ -390,32 +389,28 @@ pub mod primes {
 
                 // Safety: we have ensured the block_idx < length
                 let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
-                // head -- prior to start of repeated section
+
+                // Head -- prior to start of repeated section
                 let start_word = start % N;
                 for i in 0..start_word {
                     block[i] = Self::apply_mask(block[i], i, start, SKIP);
                 }
 
-                // repeated section: this is the part we want the compiler
-                // to optimise aggressively; calculate the masks we're going to apply
-                // first, then apply them. Note that we *could* calculate a single
+                // Repeated section: this is the part we want the compiler
+                // to optimise aggressively. Calculate the masks we're going to apply
+                // first, then apply them. Note that we _could_ calculate a single
                 // mask word and apply it, but I believe that would be against the rules
-                // of the competition.
+                // of the competition as we would be resetting multiple bits in one
+                // operation.
                 let masks = {
                     let mut masks = [[0u8; U8_BITS]; SKIP];
                     for w in 0..SKIP {
-                        masks[w][0] = !(Self::mask(w + start + N * 0, start, SKIP) << 0);
-                        masks[w][1] = !(Self::mask(w + start + N * 1, start, SKIP) << 1);
-                        masks[w][2] = !(Self::mask(w + start + N * 2, start, SKIP) << 2);
-                        masks[w][3] = !(Self::mask(w + start + N * 3, start, SKIP) << 3);
-                        masks[w][4] = !(Self::mask(w + start + N * 4, start, SKIP) << 4);
-                        masks[w][5] = !(Self::mask(w + start + N * 5, start, SKIP) << 5);
-                        masks[w][6] = !(Self::mask(w + start + N * 6, start, SKIP) << 6);
-                        masks[w][7] = !(Self::mask(w + start + N * 7, start, SKIP) << 7);
+                        for bit in 0..8 {
+                            masks[w][bit] = !(Self::mask(w + start + N * bit, start, SKIP) << bit);
+                        }
                     }
                     masks
                 };
-
                 let mut i = start_word;
                 while i < N - SKIP {
                     for s in 0..SKIP {
@@ -427,7 +422,7 @@ pub mod primes {
                     i += SKIP;
                 }
 
-                // head -- after end of repeated section
+                // Tail -- after end of repeated section
                 for i in (N - SKIP)..N {
                     block[i] = Self::apply_mask(block[i], i, start, SKIP);
                 }
@@ -917,7 +912,7 @@ fn run_implementation<T: 'static + FlagStorage + Send>(
         // print results to stderr for convenience
         print_results_stderr(
             label,
-            &sieve,
+            sieve,
             print_primes,
             duration,
             total_passes,
