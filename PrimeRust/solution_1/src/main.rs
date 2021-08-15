@@ -319,7 +319,7 @@ pub mod primes {
     /// This is a variation of [`FlagStorageBitVectorStriped`] that has better locality.
     /// The striped storage is divided up into smaller blocks, and we do multiple
     /// passes over the smaller block rather than the entire sieve.
-    pub struct FlagStorageBitVectorStripedBlocks<const N: usize> {
+    pub struct FlagStorageBitVectorStripedBlocks<const N: usize, const HYBRID: bool> {
         blocks: Vec<[u8; N]>,
         length_bits: usize,
     }
@@ -333,9 +333,34 @@ pub mod primes {
     /// in parallel.
     pub const BLOCK_SIZE_SMALL: usize = 4 * 1024;
 
-    impl<const N: usize> FlagStorageBitVectorStripedBlocks<N> {
+    impl<const N: usize, const DR: bool> FlagStorageBitVectorStripedBlocks<N, DR> {
         const BLOCK_SIZE: usize = N;
         const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U8_BITS;
+
+        const fn mask(ix: usize, start: usize, skip: usize) -> u8 {
+            if ix >= start {
+                let rel = ix - start;
+                if rel % skip == 0 {
+                    1
+                } else {
+                    0
+                }
+            } else {
+                0
+            }
+        }
+
+        const fn apply_mask(mut word: u8, i: usize, start: usize, skip: usize) -> u8 {
+            word &= !(Self::mask(i + N * 0, start, skip) << 0);
+            word &= !(Self::mask(i + N * 1, start, skip) << 1);
+            word &= !(Self::mask(i + N * 2, start, skip) << 2);
+            word &= !(Self::mask(i + N * 3, start, skip) << 3);
+            word &= !(Self::mask(i + N * 4, start, skip) << 4);
+            word &= !(Self::mask(i + N * 5, start, skip) << 5);
+            word &= !(Self::mask(i + N * 6, start, skip) << 6);
+            word &= !(Self::mask(i + N * 7, start, skip) << 7);
+            word
+        }
 
         const fn ceiling(numerator: usize, denominator: usize) -> usize {
             (numerator + denominator - 1) / denominator
@@ -368,25 +393,25 @@ pub mod primes {
                 // head -- prior to start of repeated section
                 let start_word = start % N;
                 for i in 0..start_word {
-                    block[i] = block_reset_dense::apply_mask(block[i], i, start, SKIP, N);
+                    block[i] = Self::apply_mask(block[i], i, start, SKIP);
                 }
 
                 // repeated section: this is the part we want the compiler
                 // to optimise aggressively; calculate the masks we're going to apply
-                // first, then apply them. Note that we *could* calculate a single 
+                // first, then apply them. Note that we *could* calculate a single
                 // mask word and apply it, but I believe that would be against the rules
                 // of the competition.
                 let masks = {
                     let mut masks = [[0u8; U8_BITS]; SKIP];
                     for w in 0..SKIP {
-                        masks[w][0] = !(block_reset_dense::mask(w + start + N * 0, start, SKIP) << 0);
-                        masks[w][1] = !(block_reset_dense::mask(w + start + N * 1, start, SKIP) << 1);
-                        masks[w][2] = !(block_reset_dense::mask(w + start + N * 2, start, SKIP) << 2);
-                        masks[w][3] = !(block_reset_dense::mask(w + start + N * 3, start, SKIP) << 3);
-                        masks[w][4] = !(block_reset_dense::mask(w + start + N * 4, start, SKIP) << 4);
-                        masks[w][5] = !(block_reset_dense::mask(w + start + N * 5, start, SKIP) << 5);
-                        masks[w][6] = !(block_reset_dense::mask(w + start + N * 6, start, SKIP) << 6);
-                        masks[w][7] = !(block_reset_dense::mask(w + start + N * 7, start, SKIP) << 7);
+                        masks[w][0] = !(Self::mask(w + start + N * 0, start, SKIP) << 0);
+                        masks[w][1] = !(Self::mask(w + start + N * 1, start, SKIP) << 1);
+                        masks[w][2] = !(Self::mask(w + start + N * 2, start, SKIP) << 2);
+                        masks[w][3] = !(Self::mask(w + start + N * 3, start, SKIP) << 3);
+                        masks[w][4] = !(Self::mask(w + start + N * 4, start, SKIP) << 4);
+                        masks[w][5] = !(Self::mask(w + start + N * 5, start, SKIP) << 5);
+                        masks[w][6] = !(Self::mask(w + start + N * 6, start, SKIP) << 6);
+                        masks[w][7] = !(Self::mask(w + start + N * 7, start, SKIP) << 7);
                     }
                     masks
                 };
@@ -394,7 +419,7 @@ pub mod primes {
                 let mut i = start_word;
                 while i < N - SKIP {
                     for s in 0..SKIP {
-                        let word = &mut block[i+s];
+                        let word = &mut block[i + s];
                         let mm = &masks[s];
                         // apply each mask to word, one by one (because rules)
                         mm.iter().for_each(|m| *word &= *m);
@@ -404,7 +429,7 @@ pub mod primes {
 
                 // head -- after end of repeated section
                 for i in (N - SKIP)..N {
-                    block[i] = block_reset_dense::apply_mask(block[i], i, start, SKIP, N);
+                    block[i] = Self::apply_mask(block[i], i, start, SKIP);
                 }
             }
         }
@@ -467,7 +492,9 @@ pub mod primes {
         }
     }
 
-    impl<const N: usize> FlagStorage for FlagStorageBitVectorStripedBlocks<N> {
+    impl<const N: usize, const HYBRID: bool> FlagStorage
+        for FlagStorageBitVectorStripedBlocks<N, HYBRID>
+    {
         fn create_true(size: usize) -> Self {
             let num_blocks = size / Self::BLOCK_SIZE_BITS + (size % Self::BLOCK_SIZE_BITS).min(1);
             Self {
@@ -478,14 +505,27 @@ pub mod primes {
 
         #[inline(always)]
         fn reset_flags(&mut self, start: usize, skip: usize) {
-            match skip {
-                2 => self.reset_flags_dense::<2>(start),
-                3 => self.reset_flags_dense::<3>(start),
-                4 => self.reset_flags_dense::<4>(start),
-                5 => self.reset_flags_dense::<5>(start),
-                6 => self.reset_flags_dense::<6>(start),
-                7 => self.reset_flags_dense::<7>(start),
-                _ => self.reset_flags_general(start, skip),
+            // Reset flags using the dense reset approach if HYBRID
+            // is enabled. Otherwise use the general approach for
+            // all skip factors.
+            if HYBRID {
+                match skip {
+                    // We only really gain an advantage from dense
+                    // resetting up to skip factors of about 7. Note
+                    // that we'll only get called for odd numbers
+                    // 3,5,7, but I feel it's only fair to list
+                    // all variants up to 7.
+                    1 => self.reset_flags_dense::<2>(start),
+                    2 => self.reset_flags_dense::<2>(start),
+                    3 => self.reset_flags_dense::<3>(start),
+                    4 => self.reset_flags_dense::<4>(start),
+                    5 => self.reset_flags_dense::<5>(start),
+                    6 => self.reset_flags_dense::<6>(start),
+                    7 => self.reset_flags_dense::<7>(start),
+                    _ => self.reset_flags_general(start, skip),
+                }
+            } else {
+                self.reset_flags_general(start, skip);
             }
         }
 
@@ -503,38 +543,7 @@ pub mod primes {
         }
     }
 
-    mod block_reset_dense {
-        pub const fn mask(ix: usize, start: usize, skip: usize) -> u8 {
-            if ix >= start {
-                let rel = ix - start;
-                if rel % skip == 0 {
-                    1
-                } else {
-                    0
-                }
-            } else {
-                0
-            }
-        }
-
-        pub const fn apply_mask(
-            mut word: u8,
-            i: usize,
-            start: usize,
-            skip: usize,
-            words_length: usize,
-        ) -> u8 {
-            word &= !(mask(i + words_length * 0, start, skip) << 0);
-            word &= !(mask(i + words_length * 1, start, skip) << 1);
-            word &= !(mask(i + words_length * 2, start, skip) << 2);
-            word &= !(mask(i + words_length * 3, start, skip) << 3);
-            word &= !(mask(i + words_length * 4, start, skip) << 4);
-            word &= !(mask(i + words_length * 5, start, skip) << 5);
-            word &= !(mask(i + words_length * 6, start, skip) << 6);
-            word &= !(mask(i + words_length * 7, start, skip) << 7);
-            word
-        }
-    }
+    mod block_reset_dense {}
 
     /// The actual sieve implementation, generic over the storage. This allows us to
     /// include the storage type we want without re-writing the algorithm each time.
@@ -699,6 +708,11 @@ struct CommandLineOptions {
     #[structopt(long)]
     bits_striped_blocks: bool,
 
+    /// Run variant that uses bit-level storage, using striped storage in blocks with
+    /// hybrid dense resets for smaller skip factors
+    #[structopt(long)]
+    bits_striped_hybrid: bool,
+
     /// Run variant that uses byte-level storage
     #[structopt(long)]
     bytes: bool,
@@ -724,6 +738,7 @@ fn main() {
         opt.bits_rotate,
         opt.bits_striped,
         opt.bits_striped_blocks,
+        opt.bits_striped_hybrid,
         opt.bytes,
     ]
     .iter()
@@ -794,7 +809,7 @@ fn main() {
             thread::sleep(Duration::from_secs(1));
             print_header(threads, limit, run_duration);
             for _ in 0..repetitions {
-                run_implementation::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT>>(
+                run_implementation::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT, false>>(
                     "bit-storage-striped-blocks",
                     1,
                     run_duration,
@@ -805,8 +820,34 @@ fn main() {
             }
 
             for _ in 0..repetitions {
-                run_implementation::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL>>(
+                run_implementation::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL, false>>(
                     "bit-storage-striped-blocks-small",
+                    1,
+                    run_duration,
+                    threads,
+                    limit,
+                    opt.print,
+                );
+            }
+        }
+
+        if opt.bits_striped_hybrid || run_all {
+            thread::sleep(Duration::from_secs(1));
+            print_header(threads, limit, run_duration);
+            for _ in 0..repetitions {
+                run_implementation::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT, true>>(
+                    "bit-storage-striped-hybrid",
+                    1,
+                    run_duration,
+                    threads,
+                    limit,
+                    opt.print,
+                );
+            }
+
+            for _ in 0..repetitions {
+                run_implementation::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL, true>>(
+                    "bit-storage-striped-hybrid-small",
                     1,
                     run_duration,
                     threads,
@@ -909,10 +950,17 @@ mod tests {
     }
 
     #[test]
-    fn sieve_known_correct_bits_striped_blocks() {
+    fn sieve_known_correct_bits_striped_blocks_general() {
         // check both sizes
-        sieve_known_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT>>();
-        sieve_known_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL>>();
+        sieve_known_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT, false>>();
+        sieve_known_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL, false>>();
+    }
+
+    #[test]
+    fn sieve_known_correct_bits_striped_blocks_hybrid() {
+        // check both sizes
+        sieve_known_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT, true>>();
+        sieve_known_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL, true>>();
     }
 
     #[test]
@@ -955,12 +1003,21 @@ mod tests {
     }
 
     #[test]
-    fn storage_bit_striped_block_correct() {
+    fn storage_bit_striped_block_general_correct() {
         // test small as well as default block sizes
-        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<7>>();
-        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<1024>>();
-        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL>>();
-        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<7, false>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<1024, false>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL, false>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT, false>>();
+    }
+
+    #[test]
+    fn storage_bit_striped_block_hybrid_correct() {
+        // test small as well as default block sizes
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<7, true>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<1024, true>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL, true>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT, true>>();
     }
 
     fn basic_storage_correct<T: FlagStorage>() {
