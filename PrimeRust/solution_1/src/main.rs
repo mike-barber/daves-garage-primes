@@ -341,7 +341,11 @@ pub mod primes {
             (numerator + denominator - 1) / denominator
         }
 
-        const fn first_relative_index(block_first_index: usize, start: usize, skip: usize) -> usize {
+        const fn first_relative_index(
+            block_first_index: usize,
+            start: usize,
+            skip: usize,
+        ) -> usize {
             if start > block_first_index {
                 return start;
             }
@@ -368,12 +372,32 @@ pub mod primes {
                 }
 
                 // repeated section: this is the part we want the compiler
-                // to optimise aggressively
+                // to optimise aggressively; calculate the masks we're going to apply
+                // first, then apply them. Note that we *could* calculate a single 
+                // mask word and apply it, but I believe that would be against the rules
+                // of the competition.
+                let masks = {
+                    let mut masks = [[0u8; U8_BITS]; SKIP];
+                    for w in 0..SKIP {
+                        masks[w][0] = !(block_reset_dense::mask(w + start + N * 0, start, SKIP) << 0);
+                        masks[w][1] = !(block_reset_dense::mask(w + start + N * 1, start, SKIP) << 1);
+                        masks[w][2] = !(block_reset_dense::mask(w + start + N * 2, start, SKIP) << 2);
+                        masks[w][3] = !(block_reset_dense::mask(w + start + N * 3, start, SKIP) << 3);
+                        masks[w][4] = !(block_reset_dense::mask(w + start + N * 4, start, SKIP) << 4);
+                        masks[w][5] = !(block_reset_dense::mask(w + start + N * 5, start, SKIP) << 5);
+                        masks[w][6] = !(block_reset_dense::mask(w + start + N * 6, start, SKIP) << 6);
+                        masks[w][7] = !(block_reset_dense::mask(w + start + N * 7, start, SKIP) << 7);
+                    }
+                    masks
+                };
+
                 let mut i = start_word;
                 while i < N - SKIP {
                     for s in 0..SKIP {
-                        block[i + s] =
-                            block_reset_dense::apply_mask(block[i + s], i + s, start, SKIP, N);
+                        let word = &mut block[i+s];
+                        let mm = &masks[s];
+                        // apply each mask to word, one by one (because rules)
+                        mm.iter().for_each(|m| *word &= *m);
                     }
                     i += SKIP;
                 }
@@ -455,8 +479,11 @@ pub mod primes {
         #[inline(always)]
         fn reset_flags(&mut self, start: usize, skip: usize) {
             match skip {
+                2 => self.reset_flags_dense::<2>(start),
                 3 => self.reset_flags_dense::<3>(start),
+                4 => self.reset_flags_dense::<4>(start),
                 5 => self.reset_flags_dense::<5>(start),
+                6 => self.reset_flags_dense::<6>(start),
                 7 => self.reset_flags_dense::<7>(start),
                 _ => self.reset_flags_general(start, skip),
             }
@@ -477,7 +504,7 @@ pub mod primes {
     }
 
     mod block_reset_dense {
-        const fn mask(ix: usize, start: usize, skip: usize) -> u8 {
+        pub const fn mask(ix: usize, start: usize, skip: usize) -> u8 {
             if ix >= start {
                 let rel = ix - start;
                 if rel % skip == 0 {
