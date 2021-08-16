@@ -351,7 +351,7 @@ pub mod primes {
             // earliest start to avoid resetting the factor itself
             let start = SKIP / 2 + SKIP;
             debug_assert!(
-                start < Self::BLOCK_SIZE_BITS,
+                start < Self::BLOCK_SIZE,
                 "algorithm only correct for small skip factors"
             );
             for block_idx in 0..self.blocks.len() {
@@ -364,19 +364,29 @@ pub mod primes {
                 // Note that we _could_ calculate a single mask word and apply it,
                 // but I believe that would be against the rules of the competition as
                 // we would be resetting multiple bits in one operation if we did that.
-                let masks = {
-                    let mut masks = [[0u8; U8_BITS]; SKIP];
-                    for word_idx in 0..SKIP {
-                        for bit in 0..8 {
-                            let index = block_idx * N * 8 + bit * N + word_idx;
-                            masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
-                        }
+                let mut masks = [[0u8; U8_BITS]; SKIP];
+                for word_idx in 0..SKIP {
+                    for bit in 0..8 {
+                        let index = block_idx * N * 8 + bit * N + word_idx;
+                        masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
                     }
-                    masks
-                };
+                }
 
-                // preserve start word
-                let start_word = block[start];
+                // preserve start words
+                // TODO: choose appropriate size
+                let mut start_words_rev = [0u8; SKIP];
+                {
+                    let mut i = start;
+                    let mut word_idx = 0;
+                    loop {
+                        start_words_rev[word_idx] = block[i];
+                        word_idx += 1;
+                        if i < SKIP {
+                            break;
+                        }
+                        i -= SKIP;
+                    }
+                };
 
                 // subsequent blocks are simpler - just apply all masks
                 // block
@@ -394,28 +404,43 @@ pub mod primes {
                 //     block[i] = word;
                 // }
 
-                // fn apply_masks(word: &mut u8, masks: [u8;U8_BITS]) {
-                //     masks.iter().for_each(|mask| *word &= mask);
-                // }
+                fn apply_masks(word: &mut u8, masks: &[u8; U8_BITS]) {
+                    masks.iter().for_each(|mask| *word &= mask);
+                }
 
                 block.chunks_exact_mut(SKIP).for_each(|words| {
-                    words.iter_mut().zip(masks).for_each(|(word, mm)| {
-                        mm.iter().for_each(|bit_mask| *word &= bit_mask);
-                    });
+                    words
+                        .iter_mut()
+                        .zip(masks.iter().copied())
+                        .for_each(|(word, mm)| {
+                            apply_masks(word, &mm);
+                        });
+                    // for i in 0..SKIP {
+                    //     apply_masks(&mut words[i], &masks[i]);
+                    // }
                 });
 
                 block
                     .chunks_exact_mut(SKIP)
                     .into_remainder()
                     .iter_mut()
-                    .zip(masks)
+                    .zip(masks.iter().copied())
                     .for_each(|(word, mm)| {
-                        mm.iter().for_each(|bit_mask| *word &= bit_mask);
+                        apply_masks(word, &mm);
                     });
 
-                // fix start word on first block -- we need to restore that bit
+                // fix start words on first block -- we need to restore the first bits
                 if block_idx == 0 {
-                    block[start] |= start_word & 1;
+                    let mut i = start;
+                    let mut word_idx = 0;
+                    loop {
+                        block[i] |= start_words_rev[word_idx] & 1;
+                        word_idx += 1;
+                        if i < SKIP {
+                            break;
+                        }
+                        i -= SKIP;
+                    }
                 }
 
                 // Apply masks. The first block needs to be treated differently.
@@ -538,13 +563,17 @@ pub mod primes {
                     // that we'll only get called for odd numbers
                     // 3,5,7, but I feel it's only fair to list
                     // all variants up to 7.
-                    // 1 => self.reset_flags_dense::<1>(),
-                    // 2 => self.reset_flags_dense::<2>(),
+                    1 => self.reset_flags_dense::<1>(),
+                    2 => self.reset_flags_dense::<2>(),
                     3 => self.reset_flags_dense::<3>(),
-                    // 4 => self.reset_flags_dense::<4>(),
-                    // 5 => self.reset_flags_dense::<5>(),
+                    4 => self.reset_flags_dense::<4>(),
+                    5 => self.reset_flags_dense::<5>(),
                     // 6 => self.reset_flags_dense::<6>(),
                     // 7 => self.reset_flags_dense::<7>(),
+                    // 8 => self.reset_flags_dense::<8>(),
+                    // 9 => self.reset_flags_dense::<9>(),
+                    // 10 => self.reset_flags_dense::<10>(),
+                    // 11 => self.reset_flags_dense::<11>(),
                     _ => self.reset_flags_general(start, skip),
                 }
             } else {
@@ -1035,7 +1064,7 @@ mod tests {
     #[test]
     fn storage_bit_striped_block_hybrid_correct() {
         // test small as well as default block sizes
-        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<7, true>>();
+        basic_storage_correct::<FlagStorageBitVectorStripedBlocks<50, true>>();
         basic_storage_correct::<FlagStorageBitVectorStripedBlocks<1024, true>>();
         basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_SMALL, true>>();
         basic_storage_correct::<FlagStorageBitVectorStripedBlocks<BLOCK_SIZE_DEFAULT, true>>();
