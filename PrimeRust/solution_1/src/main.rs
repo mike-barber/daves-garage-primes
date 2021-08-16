@@ -355,7 +355,7 @@ pub mod primes {
                 "algorithm only correct for small skip factors"
             );
             for block_idx in 0..self.blocks.len() {
-                let block_offset = block_idx * Self::BLOCK_SIZE_BITS;
+                //let block_offset = block_idx * N * 8;
 
                 // Safety: we have ensured the block_idx < length
                 let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
@@ -368,41 +368,92 @@ pub mod primes {
                     let mut masks = [[0u8; U8_BITS]; SKIP];
                     for word_idx in 0..SKIP {
                         for bit in 0..8 {
-                            let index = block_offset + bit * Self::BLOCK_SIZE + word_idx;
+                            let index = block_idx * N * 8 + bit * N + word_idx;
                             masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
                         }
                     }
                     masks
                 };
 
+                // preserve start word
+                let start_word = block[start];
+
+                // subsequent blocks are simpler - just apply all masks
+                // block
+                //     .iter_mut()
+                //     .zip(masks.iter().cycle().copied())
+                //     .for_each(|(word, mm)| {
+                //         mm.iter().for_each(|m| *word &= m);
+                //     });
+                // for i in 0..N {
+                //     let mut word = block[i];
+                //     let mask = masks[i % SKIP];
+                //     for b in 0..U8_BITS {
+                //         word &= mask[b];
+                //     }
+                //     block[i] = word;
+                // }
+
+                // fn apply_masks(word: &mut u8, masks: [u8;U8_BITS]) {
+                //     masks.iter().for_each(|mask| *word &= mask);
+                // }
+
+                block.chunks_exact_mut(SKIP).for_each(|words| {
+                    words.iter_mut().zip(masks).for_each(|(word, mm)| {
+                        mm.iter().for_each(|bit_mask| *word &= bit_mask);
+                    });
+                });
+
+                block
+                    .chunks_exact_mut(SKIP)
+                    .into_remainder()
+                    .iter_mut()
+                    .zip(masks)
+                    .for_each(|(word, mm)| {
+                        mm.iter().for_each(|bit_mask| *word &= bit_mask);
+                    });
+
+                // fix start word on first block -- we need to restore that bit
+                if block_idx == 0 {
+                    block[start] |= start_word & 1;
+                }
+
                 // Apply masks. The first block needs to be treated differently.
                 // We cannot reset the factor itself, only higher multiples.
-                if block_idx == 0 {
-                    // apply masks to first `start` words, skipping the 0'th bit
-                    block
-                        .iter_mut()
-                        .take(start)
-                        .zip(masks.iter().cycle())
-                        .for_each(|(word, mm)| {
-                            mm.iter().skip(1).for_each(|m| *word &= m);
-                        });
-                    // then apply all masks to the remaining words
-                    block
-                        .iter_mut()
-                        .skip(start)
-                        .zip(masks.iter().cycle().skip(start))
-                        .for_each(|(word, mm)| {
-                            mm.iter().for_each(|m| *word &= m);
-                        })
-                } else {
-                    // subsequent blocks are simpler - just apply all masks
-                    block
-                        .iter_mut()
-                        .zip(masks.iter().cycle())
-                        .for_each(|(word, mm)| {
-                            mm.iter().for_each(|m| *word &= m);
-                        });
-                }
+                // if block_idx == 0 {
+                //     // apply masks to first `start` words, skipping the 0'th bit
+                //     block
+                //         .iter_mut()
+                //         .take(start)
+                //         .zip(masks.iter().cycle().copied())
+                //         .for_each(|(word, mm)| {
+                //             mm.iter().skip(1).for_each(|m| *word &= m);
+                //         });
+                //     // then apply all masks to the remaining words
+                //     block
+                //         .iter_mut()
+                //         .skip(start)
+                //         .zip(masks.iter().cycle().skip(start).copied())
+                //         .for_each(|(word, mm)| {
+                //             mm.iter().for_each(|m| *word &= m);
+                //         })
+                // } else {
+                //     // subsequent blocks are simpler - just apply all masks
+                //     // block
+                //     //     .iter_mut()
+                //     //     .zip(masks.iter().cycle().copied())
+                //     //     .for_each(|(word, mm)| {
+                //     //         mm.iter().for_each(|m| *word &= m);
+                //     //     });
+                //     for i in 0..N {
+                //         let mut word = block[i];
+                //         let mask = masks[i % SKIP];
+                //         for b in 0..U8_BITS {
+                //             word &= mask[b];
+                //         }
+                //         block[i] = word;
+                //     }
+                // }
             }
         }
 
@@ -487,13 +538,13 @@ pub mod primes {
                     // that we'll only get called for odd numbers
                     // 3,5,7, but I feel it's only fair to list
                     // all variants up to 7.
-                    1 => self.reset_flags_dense::<1>(),
-                    2 => self.reset_flags_dense::<2>(),
+                    // 1 => self.reset_flags_dense::<1>(),
+                    // 2 => self.reset_flags_dense::<2>(),
                     3 => self.reset_flags_dense::<3>(),
-                    4 => self.reset_flags_dense::<4>(),
-                    5 => self.reset_flags_dense::<5>(),
-                    6 => self.reset_flags_dense::<6>(),
-                    7 => self.reset_flags_dense::<7>(),
+                    // 4 => self.reset_flags_dense::<4>(),
+                    // 5 => self.reset_flags_dense::<5>(),
+                    // 6 => self.reset_flags_dense::<6>(),
+                    // 7 => self.reset_flags_dense::<7>(),
                     _ => self.reset_flags_general(start, skip),
                 }
             } else {
