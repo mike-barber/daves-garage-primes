@@ -487,7 +487,7 @@ pub mod primes {
                     // that we'll only get called for odd numbers
                     // 3,5,7, but I feel it's only fair to list
                     // all variants up to 7.
-                    1 => self.reset_flags_dense::<2>(),
+                    1 => self.reset_flags_dense::<1>(),
                     2 => self.reset_flags_dense::<2>(),
                     3 => self.reset_flags_dense::<3>(),
                     4 => self.reset_flags_dense::<4>(),
@@ -514,8 +514,6 @@ pub mod primes {
             *word & (1 << bit_index) != 0
         }
     }
-
-    mod block_reset_dense {}
 
     /// The actual sieve implementation, generic over the storage. This allows us to
     /// include the storage type we want without re-writing the algorithm each time.
