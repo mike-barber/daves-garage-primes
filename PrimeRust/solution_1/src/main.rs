@@ -338,93 +338,70 @@ pub mod primes {
         const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U8_BITS;
 
         const fn mask(index: usize, start: usize, skip: usize) -> u8 {
-            if index >= start {
-                let rel = index - start;
-                if rel % skip == 0 {
-                    1
-                } else {
-                    0
-                }
+            let rel = index as isize - start as isize;
+            if rel % skip as isize == 0 {
+                1
             } else {
                 0
             }
         }
 
-        const fn apply_mask(mut word: u8, index: usize, start: usize, skip: usize) -> u8 {
-            word &= !(Self::mask(index, start, skip));
-            word &= !(Self::mask(index + N, start, skip) << 1);
-            word &= !(Self::mask(index + N * 2, start, skip) << 2);
-            word &= !(Self::mask(index + N * 3, start, skip) << 3);
-            word &= !(Self::mask(index + N * 4, start, skip) << 4);
-            word &= !(Self::mask(index + N * 5, start, skip) << 5);
-            word &= !(Self::mask(index + N * 6, start, skip) << 6);
-            word &= !(Self::mask(index + N * 7, start, skip) << 7);
-            word
-        }
-
-        const fn ceiling(numerator: usize, denominator: usize) -> usize {
-            (numerator + denominator - 1) / denominator
-        }
-
-        const fn first_relative_index(
-            block_first_index: usize,
-            start: usize,
-            skip: usize,
-        ) -> usize {
-            if start > block_first_index {
-                return start;
-            }
-            let ceil = Self::ceiling(block_first_index - start, skip);
-            let absolute = (ceil * skip) + start;
-            absolute - block_first_index // relative position in block
-        }
-
         #[inline(always)]
-        fn reset_flags_dense<const SKIP: usize>(&mut self, start: usize) {
-            let block_idx_start = start / Self::BLOCK_SIZE_BITS;
-            for block_idx in block_idx_start..self.blocks.len() {
-                // determine start within block
-                let start =
-                    Self::first_relative_index(block_idx * Self::BLOCK_SIZE_BITS, start, SKIP);
+        fn reset_flags_dense<const SKIP: usize>(&mut self) {
+            // earliest start to avoid resetting the factor itself
+            let start = SKIP / 2 + SKIP;
+            debug_assert!(
+                start < Self::BLOCK_SIZE_BITS,
+                "algorithm only correct for small skip factors"
+            );
+            for block_idx in 0..self.blocks.len() {
+                let block_offset = block_idx * Self::BLOCK_SIZE_BITS;
 
                 // Safety: we have ensured the block_idx < length
                 let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
 
-                // Head -- prior to start of repeated section
-                let start_word = start % N;
-                for i in 0..start_word {
-                    block[i] = Self::apply_mask(block[i], i, start, SKIP);
-                }
-
-                // Repeated section: this is the part we want the compiler
-                // to optimise aggressively. Calculate the masks we're going to apply
-                // first, then apply them. Note that we _could_ calculate a single
-                // mask word and apply it, but I believe that would be against the rules
-                // of the competition as we would be resetting multiple bits in one
-                // operation.
+                // Calculate the masks we're going to apply first.
+                // Note that we _could_ calculate a single mask word and apply it,
+                // but I believe that would be against the rules of the competition as
+                // we would be resetting multiple bits in one operation if we did that.
                 let masks = {
                     let mut masks = [[0u8; U8_BITS]; SKIP];
-                    for w in 0..SKIP {
+                    for word_idx in 0..SKIP {
                         for bit in 0..8 {
-                            masks[w][bit] = !(Self::mask(w + start + N * bit, start, SKIP) << bit);
+                            let index = block_offset + bit * Self::BLOCK_SIZE + word_idx;
+                            masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
                         }
                     }
                     masks
                 };
-                let mut i = start_word;
-                while i < N - SKIP {
-                    for s in 0..SKIP {
-                        let word = &mut block[i + s];
-                        let mm = &masks[s];
-                        // apply each mask to word, one by one (because rules)
-                        mm.iter().for_each(|m| *word &= *m);
-                    }
-                    i += SKIP;
-                }
 
-                // Tail -- after end of repeated section
-                for i in (N - SKIP)..N {
-                    block[i] = Self::apply_mask(block[i], i, start, SKIP);
+                // Apply masks. The first block needs to be treated differently.
+                // We cannot reset the factor itself, only higher multiples.
+                if block_idx == 0 {
+                    // apply masks to first `start` words, skipping the 0'th bit
+                    block
+                        .iter_mut()
+                        .take(start)
+                        .zip(masks.iter().cycle())
+                        .for_each(|(word, mm)| {
+                            mm.iter().skip(1).for_each(|m| *word &= m);
+                        });
+                    // then apply all masks to the remaining words
+                    block
+                        .iter_mut()
+                        .skip(start)
+                        .zip(masks.iter().cycle().skip(start))
+                        .for_each(|(word, mm)| {
+                            mm.iter().for_each(|m| *word &= m);
+                        })
+                } else {
+                    // subsequent blocks are simpler - just apply all masks
+                    block
+                        .iter_mut()
+                        .zip(masks.iter().cycle())
+                        .for_each(|(word, mm)| {
+                            mm.iter().for_each(|m| *word &= m);
+                        });
                 }
             }
         }
@@ -510,13 +487,13 @@ pub mod primes {
                     // that we'll only get called for odd numbers
                     // 3,5,7, but I feel it's only fair to list
                     // all variants up to 7.
-                    1 => self.reset_flags_dense::<2>(start),
-                    2 => self.reset_flags_dense::<2>(start),
-                    3 => self.reset_flags_dense::<3>(start),
-                    4 => self.reset_flags_dense::<4>(start),
-                    5 => self.reset_flags_dense::<5>(start),
-                    6 => self.reset_flags_dense::<6>(start),
-                    7 => self.reset_flags_dense::<7>(start),
+                    1 => self.reset_flags_dense::<2>(),
+                    2 => self.reset_flags_dense::<2>(),
+                    3 => self.reset_flags_dense::<3>(),
+                    4 => self.reset_flags_dense::<4>(),
+                    5 => self.reset_flags_dense::<5>(),
+                    6 => self.reset_flags_dense::<6>(),
+                    7 => self.reset_flags_dense::<7>(),
                     _ => self.reset_flags_general(start, skip),
                 }
             } else {
@@ -1022,10 +999,11 @@ mod tests {
             assert!(storage.get(i), "expected initially true for index {}", i);
         }
 
-        // not primes; we're just checking the storage works
-        storage.reset_flags(30, 7);
+        // use realistic start values, as hybrid storage makes assumptions
+        // about where to start resetting
+        storage.reset_flags(7, 5);
         for i in 0..size {
-            let expected_inv = (i >= 30) && ((i - 30) % 7 == 0);
+            let expected_inv = (i >= 7) && ((i - 7) % 5 == 0);
             assert_eq!(
                 storage.get(i),
                 !expected_inv,
@@ -1034,10 +1012,10 @@ mod tests {
             );
         }
 
-        storage.reset_flags(72, 100);
+        storage.reset_flags(19, 13);
         for i in 0..size {
-            let first = (i >= 30) && ((i - 30) % 7 == 0);
-            let second = (i >= 72) && ((i - 72) % 100 == 0);
+            let first = (i >= 7) && ((i - 7) % 5 == 0);
+            let second = (i >= 19) && ((i - 19) % 13 == 0);
             let expected_inv = first || second;
             assert_eq!(
                 storage.get(i),
