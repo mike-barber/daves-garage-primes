@@ -333,9 +333,10 @@ pub mod primes {
     /// in parallel.
     pub const BLOCK_SIZE_SMALL: usize = 4 * 1024;
 
-    impl<const N: usize, const DR: bool> FlagStorageBitVectorStripedBlocks<N, DR> {
-        const BLOCK_SIZE: usize = N;
-        const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U8_BITS;
+    impl<const BLOCK_SIZE: usize, const HYBRID: bool>
+        FlagStorageBitVectorStripedBlocks<BLOCK_SIZE, HYBRID>
+    {
+        const BLOCK_SIZE_BITS: usize = BLOCK_SIZE * U8_BITS;
 
         fn should_reset(index: usize, start: usize, skip: usize) -> u8 {
             let rel = index as isize - start as isize;
@@ -351,7 +352,7 @@ pub mod primes {
             // earliest start to avoid resetting the factor itself
             let start = SKIP / 2 + SKIP;
             debug_assert!(
-                start < Self::BLOCK_SIZE,
+                start < BLOCK_SIZE,
                 "algorithm only correct for small skip factors"
             );
             for (block_idx, block) in self.blocks.iter_mut().enumerate() {
@@ -372,8 +373,8 @@ pub mod primes {
                 let mut mask_set = [[0u8; U8_BITS]; SKIP];
                 for word_idx in 0..SKIP {
                     for bit in 0..8 {
-                        let block_index_offset = block_idx * N * U8_BITS;
-                        let bit_index_offset = bit * N;
+                        let block_index_offset = block_idx * BLOCK_SIZE * U8_BITS;
+                        let bit_index_offset = bit * BLOCK_SIZE;
                         let index = block_index_offset + bit_index_offset + word_idx;
                         mask_set[word_idx][bit] = !(Self::should_reset(index, start, SKIP) << bit);
                     }
@@ -421,8 +422,8 @@ pub mod primes {
             // determine first block, start bit, and first word
             let block_idx_start = start / Self::BLOCK_SIZE_BITS;
             let offset_idx = start % Self::BLOCK_SIZE_BITS;
-            let mut bit_idx = offset_idx / Self::BLOCK_SIZE;
-            let mut word_idx = offset_idx % Self::BLOCK_SIZE;
+            let mut bit_idx = offset_idx / BLOCK_SIZE;
+            let mut word_idx = offset_idx % BLOCK_SIZE;
 
             for block_idx in block_idx_start..self.blocks.len() {
                 // Safety: we have ensured the block_idx < length
@@ -430,9 +431,8 @@ pub mod primes {
                 while bit_idx < U8_BITS {
                     // calculate effective end position: we might have a shorter stripe on the last iteration
                     let stripe_start_position =
-                        block_idx * Self::BLOCK_SIZE_BITS + bit_idx * Self::BLOCK_SIZE;
-                    let effective_len =
-                        Self::BLOCK_SIZE.min(self.length_bits - stripe_start_position);
+                        block_idx * Self::BLOCK_SIZE_BITS + bit_idx * BLOCK_SIZE;
+                    let effective_len = BLOCK_SIZE.min(self.length_bits - stripe_start_position);
 
                     // get mask for this bit position
                     let mask = !(1 << bit_idx);
@@ -459,13 +459,13 @@ pub mod primes {
                     }
 
                     // early termination: this is the last stripe
-                    if effective_len != Self::BLOCK_SIZE {
+                    if effective_len != BLOCK_SIZE {
                         return;
                     }
 
                     // bit/stripe complete; advance to next bit
                     bit_idx += 1;
-                    word_idx -= Self::BLOCK_SIZE;
+                    word_idx -= BLOCK_SIZE;
                 }
 
                 // block complete; reset bit index and proceed with the next block
@@ -474,14 +474,14 @@ pub mod primes {
         }
     }
 
-    impl<const N: usize, const HYBRID: bool> FlagStorage
-        for FlagStorageBitVectorStripedBlocks<N, HYBRID>
+    impl<const BLOCK_SIZE: usize, const HYBRID: bool> FlagStorage
+        for FlagStorageBitVectorStripedBlocks<BLOCK_SIZE, HYBRID>
     {
         fn create_true(size: usize) -> Self {
             let num_blocks = size / Self::BLOCK_SIZE_BITS + (size % Self::BLOCK_SIZE_BITS).min(1);
             Self {
                 length_bits: size,
-                blocks: vec![[u8::MAX; N]; num_blocks],
+                blocks: vec![[u8::MAX; BLOCK_SIZE]; num_blocks],
             }
         }
 
@@ -493,21 +493,14 @@ pub mod primes {
             if HYBRID {
                 match skip {
                     // We only really gain an advantage from dense
-                    // resetting up to skip factors of about 7. Note
-                    // that we'll only get called for odd numbers
-                    // 3,5,7, but I feel it's only fair to list
-                    // all variants up to 7.
+                    // resetting up to skip factors under 8, as after
+                    // that, we're expecting the resets to be sparse.
+                    // We only get called for skip factors, so there's
+                    // no point adding cases for even numbers.
                     1 => self.reset_flags_dense::<1>(),
-                    // 2 => self.reset_flags_dense::<2>(),
                     3 => self.reset_flags_dense::<3>(),
-                    // 4 => self.reset_flags_dense::<4>(),
                     5 => self.reset_flags_dense::<5>(),
-                    // 6 => self.reset_flags_dense::<6>(),
                     7 => self.reset_flags_dense::<7>(),
-                    // 8 => self.reset_flags_dense::<8>(),
-                    // 9 => self.reset_flags_dense::<9>(),
-                    // 10 => self.reset_flags_dense::<10>(),
-                    // 11 => self.reset_flags_dense::<11>(),
                     _ => self.reset_flags_general(start, skip),
                 }
             } else {
@@ -522,8 +515,8 @@ pub mod primes {
             }
             let block = index / Self::BLOCK_SIZE_BITS;
             let offset = index % Self::BLOCK_SIZE_BITS;
-            let bit_index = offset / Self::BLOCK_SIZE;
-            let word_index = offset % Self::BLOCK_SIZE;
+            let bit_index = offset / BLOCK_SIZE;
+            let word_index = offset % BLOCK_SIZE;
             let word = self.blocks.get(block).unwrap().get(word_index).unwrap();
             *word & (1 << bit_index) != 0
         }
