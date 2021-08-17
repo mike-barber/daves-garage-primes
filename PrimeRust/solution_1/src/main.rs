@@ -337,7 +337,7 @@ pub mod primes {
         const BLOCK_SIZE: usize = N;
         const BLOCK_SIZE_BITS: usize = Self::BLOCK_SIZE * U8_BITS;
 
-        const fn mask(index: usize, start: usize, skip: usize) -> u8 {
+        fn should_reset(index: usize, start: usize, skip: usize) -> u8 {
             let rel = index as isize - start as isize;
             if rel % skip as isize == 0 {
                 1
@@ -360,7 +360,7 @@ pub mod primes {
                 // into two sections with different rules. Only applicable on the first block:
                 // this is the factor itself, and we don't want to reset that flag.
                 let preserved_word_mask = if block_idx == 0 {
-                    block[SKIP/2] & 1 
+                    block[SKIP / 2] & 1
                 } else {
                     0
                 };
@@ -369,46 +369,49 @@ pub mod primes {
                 // Note that we _could_ calculate a single mask word and apply it,
                 // but I believe that would be against the rules of the competition as
                 // we would be resetting multiple bits in one operation if we did that.
-                let mut masks = [[0u8; U8_BITS]; SKIP];
+                let mut mask_set = [[0u8; U8_BITS]; SKIP];
                 for word_idx in 0..SKIP {
                     for bit in 0..8 {
                         let block_index_offset = block_idx * N * U8_BITS;
                         let bit_index_offset = bit * N;
                         let index = block_index_offset + bit_index_offset + word_idx;
-                        masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
+                        mask_set[word_idx][bit] = !(Self::should_reset(index, start, SKIP) << bit);
                     }
                 }
                 // rebind as immutable
-                let masks = masks;
+                let mask_set = mask_set;
 
+                /// apply all 8 masks - one for each bit - using a fold, mostly
+                /// because folds are fun
                 fn apply_masks(word: &mut u8, masks: &[u8; U8_BITS]) {
-                    // let res = masks.iter().fold(*word, |w, mask| w & mask);
-                    // *word = res;
-                    masks.iter().for_each(|mask| *word &= mask);
+                    *word = masks.iter().fold(*word, |w, mask| w & mask);
                 }
 
+                // run through all exact size chunks; compiler loves to optimise
+                // known sizes
                 block.chunks_exact_mut(SKIP).for_each(|words| {
                     words
                         .iter_mut()
-                        .zip(masks.iter().copied())
-                        .for_each(|(word, mm)| {
-                            apply_masks(word, &mm);
+                        .zip(mask_set.iter().copied())
+                        .for_each(|(word, masks)| {
+                            apply_masks(word, &masks);
                         });
                 });
 
+                // run through the last stub of fewer than SKIP items
                 block
                     .chunks_exact_mut(SKIP)
                     .into_remainder()
                     .iter_mut()
-                    .zip(masks.iter().copied())
-                    .for_each(|(word, mm)| {
-                        apply_masks(word, &mm);
+                    .zip(mask_set.iter().copied())
+                    .for_each(|(word, masks)| {
+                        apply_masks(word, &masks);
                     });
 
                 // restore the first bit on the preserved word in the first block,
                 // as noted above
                 if block_idx == 0 {
-                    block[SKIP/2] |= preserved_word_mask;
+                    block[SKIP / 2] |= preserved_word_mask;
                 }
             }
         }
