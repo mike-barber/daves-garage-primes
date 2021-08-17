@@ -364,9 +364,8 @@ pub mod primes {
                 // with the masks. Its cheaper to put it back afterwards than break the loop
                 // into two sections with different rules. Only applicable on the first block:
                 // this is the factor itself, and we don't want to reset that flag.
-                let preserved_word_index = start % SKIP;
                 let preserved_word_mask = if block_idx == 0 {
-                    block[preserved_word_index] & 1 
+                    block[SKIP/2] & 1 
                 } else {
                     0
                 };
@@ -378,7 +377,9 @@ pub mod primes {
                 let mut masks = [[0u8; U8_BITS]; SKIP];
                 for word_idx in 0..SKIP {
                     for bit in 0..8 {
-                        let index = block_idx * N * 8 + bit * N + word_idx;
+                        let block_index_offset = block_idx * N * U8_BITS;
+                        let bit_index_offset = bit * N;
+                        let index = block_index_offset + bit_index_offset + word_idx;
                         masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
                     }
                 }
@@ -411,7 +412,7 @@ pub mod primes {
                 // restore the first bit on the preserved word in the first block,
                 // as noted above
                 if block_idx == 0 {
-                    block[preserved_word_index] |= preserved_word_mask;
+                    block[SKIP/2] |= preserved_word_mask;
                 }
                 
 
