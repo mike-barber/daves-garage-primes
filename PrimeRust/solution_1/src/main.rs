@@ -354,10 +354,7 @@ pub mod primes {
                 start < Self::BLOCK_SIZE,
                 "algorithm only correct for small skip factors"
             );
-            for block_idx in 0..self.blocks.len() {
-                // Safety: we have ensured the block_idx < length
-                let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
-
+            for (block_idx, block) in self.blocks.iter_mut().enumerate() {
                 // Preserve the first bit of one word we know we're going to overwrite
                 // with the masks. Its cheaper to put it back afterwards than break the loop
                 // into two sections with different rules. Only applicable on the first block:
@@ -381,6 +378,8 @@ pub mod primes {
                         masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
                     }
                 }
+                // rebind as immutable
+                let masks = masks;
 
                 fn apply_masks(word: &mut u8, masks: &[u8; U8_BITS]) {
                     // let res = masks.iter().fold(*word, |w, mask| w & mask);
