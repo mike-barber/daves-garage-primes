@@ -360,6 +360,20 @@ pub mod primes {
                 // Safety: we have ensured the block_idx < length
                 let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
 
+                // preserve initial words (we know there are fewer than SKIP)
+                let mut initial_first_bits = [0u8; SKIP];
+                if block_idx == 0 {
+                    let mut count = 0;
+                    let mut i = 0;
+                    while i < start {
+                        if (i as isize - start as isize) % SKIP as isize == 0 {
+                            initial_first_bits[count] = block[i] & 1;
+                            count += 1;
+                        }
+                        i += 1;
+                    }
+                }
+
                 // Calculate the masks we're going to apply first.
                 // Note that we _could_ calculate a single mask word and apply it,
                 // but I believe that would be against the rules of the competition as
@@ -371,22 +385,6 @@ pub mod primes {
                         masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
                     }
                 }
-
-                // preserve start words
-                // TODO: choose appropriate size
-                let mut start_words_rev = [0u8; SKIP];
-                {
-                    let mut i = start;
-                    let mut word_idx = 0;
-                    loop {
-                        start_words_rev[word_idx] = block[i];
-                        word_idx += 1;
-                        if i < SKIP {
-                            break;
-                        }
-                        i -= SKIP;
-                    }
-                };
 
                 // subsequent blocks are simpler - just apply all masks
                 // block
@@ -429,17 +427,16 @@ pub mod primes {
                         apply_masks(word, &mm);
                     });
 
-                // fix start words on first block -- we need to restore the first bits
+                // fix words on first block -- we need to restore the first bits
                 if block_idx == 0 {
-                    let mut i = start;
-                    let mut word_idx = 0;
-                    loop {
-                        block[i] |= start_words_rev[word_idx] & 1;
-                        word_idx += 1;
-                        if i < SKIP {
-                            break;
+                    let mut i = 0;
+                    let mut count = 0;
+                    while i < start {
+                        if (i as isize - start as isize) % SKIP as isize == 0 {
+                            block[i] |= initial_first_bits[count]; // reinstate bit
+                            count += 1;
                         }
-                        i -= SKIP;
+                        i += 1;
                     }
                 }
 
