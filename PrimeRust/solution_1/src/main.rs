@@ -355,8 +355,6 @@ pub mod primes {
                 "algorithm only correct for small skip factors"
             );
             for block_idx in 0..self.blocks.len() {
-                //let block_offset = block_idx * N * 8;
-
                 // Safety: we have ensured the block_idx < length
                 let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
 
@@ -385,6 +383,8 @@ pub mod primes {
                 }
 
                 fn apply_masks(word: &mut u8, masks: &[u8; U8_BITS]) {
+                    // let res = masks.iter().fold(*word, |w, mask| w & mask);
+                    // *word = res;
                     masks.iter().for_each(|mask| *word &= mask);
                 }
 
@@ -395,9 +395,6 @@ pub mod primes {
                         .for_each(|(word, mm)| {
                             apply_masks(word, &mm);
                         });
-                    // for i in 0..SKIP {
-                    //     apply_masks(&mut words[i], &masks[i]);
-                    // }
                 });
 
                 block
@@ -414,44 +411,6 @@ pub mod primes {
                 if block_idx == 0 {
                     block[SKIP/2] |= preserved_word_mask;
                 }
-                
-
-                // Apply masks. The first block needs to be treated differently.
-                // We cannot reset the factor itself, only higher multiples.
-                // if block_idx == 0 {
-                //     // apply masks to first `start` words, skipping the 0'th bit
-                //     block
-                //         .iter_mut()
-                //         .take(start)
-                //         .zip(masks.iter().cycle().copied())
-                //         .for_each(|(word, mm)| {
-                //             mm.iter().skip(1).for_each(|m| *word &= m);
-                //         });
-                //     // then apply all masks to the remaining words
-                //     block
-                //         .iter_mut()
-                //         .skip(start)
-                //         .zip(masks.iter().cycle().skip(start).copied())
-                //         .for_each(|(word, mm)| {
-                //             mm.iter().for_each(|m| *word &= m);
-                //         })
-                // } else {
-                //     // subsequent blocks are simpler - just apply all masks
-                //     // block
-                //     //     .iter_mut()
-                //     //     .zip(masks.iter().cycle().copied())
-                //     //     .for_each(|(word, mm)| {
-                //     //         mm.iter().for_each(|m| *word &= m);
-                //     //     });
-                //     for i in 0..N {
-                //         let mut word = block[i];
-                //         let mask = masks[i % SKIP];
-                //         for b in 0..U8_BITS {
-                //             word &= mask[b];
-                //         }
-                //         block[i] = word;
-                //     }
-                // }
             }
         }
 
