@@ -360,19 +360,16 @@ pub mod primes {
                 // Safety: we have ensured the block_idx < length
                 let block = unsafe { self.blocks.get_unchecked_mut(block_idx) };
 
-                // preserve initial words (we know there are fewer than SKIP)
-                let mut initial_first_bits = [0u8; SKIP];
-                if block_idx == 0 {
-                    let mut count = 0;
-                    let mut i = 0;
-                    while i < start {
-                        if (i as isize - start as isize) % SKIP as isize == 0 {
-                            initial_first_bits[count] = block[i] & 1;
-                            count += 1;
-                        }
-                        i += 1;
-                    }
-                }
+                // Preserve the first bit of one word we know we're going to overwrite
+                // with the masks. Its cheaper to put it back afterwards than break the loop
+                // into two sections with different rules. Only applicable on the first block:
+                // this is the factor itself, and we don't want to reset that flag.
+                let preserved_word_index = start % SKIP;
+                let preserved_word_mask = if block_idx == 0 {
+                    block[preserved_word_index] & 1 
+                } else {
+                    0
+                };
 
                 // Calculate the masks we're going to apply first.
                 // Note that we _could_ calculate a single mask word and apply it,
@@ -385,22 +382,6 @@ pub mod primes {
                         masks[word_idx][bit] = !(Self::mask(index, start, SKIP) << bit);
                     }
                 }
-
-                // subsequent blocks are simpler - just apply all masks
-                // block
-                //     .iter_mut()
-                //     .zip(masks.iter().cycle().copied())
-                //     .for_each(|(word, mm)| {
-                //         mm.iter().for_each(|m| *word &= m);
-                //     });
-                // for i in 0..N {
-                //     let mut word = block[i];
-                //     let mask = masks[i % SKIP];
-                //     for b in 0..U8_BITS {
-                //         word &= mask[b];
-                //     }
-                //     block[i] = word;
-                // }
 
                 fn apply_masks(word: &mut u8, masks: &[u8; U8_BITS]) {
                     masks.iter().for_each(|mask| *word &= mask);
@@ -427,18 +408,12 @@ pub mod primes {
                         apply_masks(word, &mm);
                     });
 
-                // fix words on first block -- we need to restore the first bits
+                // restore the first bit on the preserved word in the first block,
+                // as noted above
                 if block_idx == 0 {
-                    let mut i = 0;
-                    let mut count = 0;
-                    while i < start {
-                        if (i as isize - start as isize) % SKIP as isize == 0 {
-                            block[i] |= initial_first_bits[count]; // reinstate bit
-                            count += 1;
-                        }
-                        i += 1;
-                    }
+                    block[preserved_word_index] |= preserved_word_mask;
                 }
+                
 
                 // Apply masks. The first block needs to be treated differently.
                 // We cannot reset the factor itself, only higher multiples.
@@ -561,12 +536,12 @@ pub mod primes {
                     // 3,5,7, but I feel it's only fair to list
                     // all variants up to 7.
                     1 => self.reset_flags_dense::<1>(),
-                    2 => self.reset_flags_dense::<2>(),
+                    // 2 => self.reset_flags_dense::<2>(),
                     3 => self.reset_flags_dense::<3>(),
-                    4 => self.reset_flags_dense::<4>(),
+                    // 4 => self.reset_flags_dense::<4>(),
                     5 => self.reset_flags_dense::<5>(),
                     // 6 => self.reset_flags_dense::<6>(),
-                    // 7 => self.reset_flags_dense::<7>(),
+                    7 => self.reset_flags_dense::<7>(),
                     // 8 => self.reset_flags_dense::<8>(),
                     // 9 => self.reset_flags_dense::<9>(),
                     // 10 => self.reset_flags_dense::<10>(),
