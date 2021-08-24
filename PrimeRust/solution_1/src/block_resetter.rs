@@ -1,3 +1,5 @@
+use crate::block_resetter;
+
 /// Returns `1` if the `index` for a given `start`, and `skip`
 /// should be reset; `0` otherwise.
 const fn should_reset(index: usize, start: usize, skip: usize) -> u8 {
@@ -13,7 +15,10 @@ const fn single_bit_mask(index: usize, start: usize, skip: usize, bit: usize) ->
     !(should_reset(index, start, skip) << bit)
 }
 
-const fn mask_set<const SKIP: usize>(block_mod: usize, block_size: usize) -> [[u8; U8_BITS]; SKIP] {
+const fn mask_sets<const SKIP: usize>(
+    block_mod: usize,
+    block_size: usize,
+) -> [[u8; U8_BITS]; SKIP] {
     let mut mask_set = [[0u8; U8_BITS]; SKIP];
     let mut word_idx = 0;
     while word_idx < SKIP {
@@ -31,11 +36,30 @@ const fn mask_set<const SKIP: usize>(block_mod: usize, block_size: usize) -> [[u
     mask_set
 }
 
+const fn mask_set(
+    block_mod: usize,
+    block_size: usize,
+    skip: usize,
+    word_idx: usize,
+) -> [u8; U8_BITS] {
+    let mut mask_set = [0u8; U8_BITS];
+
+    let mut bit = 0;
+    while bit < 8 {
+        let block_index_offset = block_mod * block_size * U8_BITS;
+        let start = skip / 2 + skip;
+        let bit_index_offset = bit * block_size;
+        let index = block_index_offset + bit_index_offset + word_idx;
+        mask_set[bit] = single_bit_mask(index, start, skip, bit);
+        bit += 1;
+    }
+    mask_set
+}
+
 pub struct BlockResetter<const BLOCK_SIZE: usize, const SKIP: usize>();
 const U8_BITS: usize = u8::BITS as usize;
 
 impl<const BLOCK_SIZE: usize, const SKIP: usize> BlockResetter<BLOCK_SIZE, SKIP> {
-    
     pub fn reset_flags_dense(blocks: &mut [[u8; BLOCK_SIZE]]) {
         // earliest start to avoid resetting the factor itself
         let start = SKIP / 2 + SKIP;
@@ -81,7 +105,7 @@ struct BlockResetInternal<const BLOCK_SIZE: usize, const SKIP: usize, const BLOC
 impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
     BlockResetInternal<BLOCK_SIZE, SKIP, BLOCK_MOD>
 {
-    const MASK_SET: [[u8; U8_BITS]; SKIP] = mask_set(BLOCK_MOD, BLOCK_SIZE);
+    const MASK_SETS: [[u8; U8_BITS]; SKIP] = mask_sets(BLOCK_MOD, BLOCK_SIZE);
 
     pub fn reset(block: &mut [u8]) {
         // // Calculate the masks we're going to apply first. Note that each mask
@@ -109,15 +133,38 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
             *word = masks.iter().fold(*word, |w, mask| w & mask);
         }
 
+        // // run through all exact `SKIP` size chunks - the compiler is able to
+        // // optimise known sizes quite well.
+        // block.chunks_exact_mut(SKIP).for_each(|words| {
+        //     words
+        //         .iter_mut()
+        //         .zip(Self::MASK_SETS.iter().copied())
+        //         .for_each(|(word, masks)| {
+        //             apply_masks(word, &masks);
+        //         });
+        // });
+
         // run through all exact `SKIP` size chunks - the compiler is able to
         // optimise known sizes quite well.
         block.chunks_exact_mut(SKIP).for_each(|words| {
-            words
-                .iter_mut()
-                .zip(Self::MASK_SET.iter().copied())
-                .for_each(|(word, masks)| {
-                    apply_masks(word, &masks);
-                });
+            words.iter_mut().enumerate().for_each(|(word_idx, word)| {
+                //let single_bit_masks = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, word_idx);
+                let single_bit_masks = &Self::MASK_SETS[word_idx];
+                *word &= single_bit_masks[0];
+                *word &= single_bit_masks[1];
+                *word &= single_bit_masks[2];
+                *word &= single_bit_masks[3];
+                *word &= single_bit_masks[4];
+                *word &= single_bit_masks[5];
+                *word &= single_bit_masks[6];
+                *word &= single_bit_masks[7];
+            })
+            // words
+            //     .iter_mut()
+            //     .zip(Self::MASK_SET.iter().copied())
+            //     .for_each(|(word, masks)| {
+            //         apply_masks(word, &masks);
+            //     });
         });
 
         // run through the remaining stub of fewer than SKIP items
@@ -125,7 +172,7 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
             .chunks_exact_mut(SKIP)
             .into_remainder()
             .iter_mut()
-            .zip(Self::MASK_SET.iter().copied())
+            .zip(Self::MASK_SETS.iter().copied())
             .for_each(|(word, masks)| {
                 apply_masks(word, &masks);
             });
