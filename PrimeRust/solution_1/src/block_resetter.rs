@@ -35,7 +35,10 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize> BlockResetter<BLOCK_SIZE, SKIP>
                 0
             };
 
-            let block_mod = block_idx % 8;
+            // The pattern of bits repeat with a cadence of SKIP. So, for a factor
+            // of 7, blocks 0 and 7 have the same pattern. This means that we can
+            // use the same specialised function for blocks 0 and 7. 
+            let block_mod = block_idx % SKIP;
             match block_mod {
                 0 => BlockResetInternal::<BLOCK_SIZE, SKIP, 0>::reset(block),
                 1 => BlockResetInternal::<BLOCK_SIZE, SKIP, 1>::reset(block),
@@ -45,6 +48,14 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize> BlockResetter<BLOCK_SIZE, SKIP>
                 5 => BlockResetInternal::<BLOCK_SIZE, SKIP, 5>::reset(block),
                 6 => BlockResetInternal::<BLOCK_SIZE, SKIP, 6>::reset(block),
                 7 => BlockResetInternal::<BLOCK_SIZE, SKIP, 7>::reset(block),
+                8 => BlockResetInternal::<BLOCK_SIZE, SKIP, 8>::reset(block),
+                9 => BlockResetInternal::<BLOCK_SIZE, SKIP, 9>::reset(block),
+                10 => BlockResetInternal::<BLOCK_SIZE, SKIP, 10>::reset(block),
+                11 => BlockResetInternal::<BLOCK_SIZE, SKIP, 11>::reset(block),
+                12 => BlockResetInternal::<BLOCK_SIZE, SKIP, 12>::reset(block),
+                13 => BlockResetInternal::<BLOCK_SIZE, SKIP, 13>::reset(block),
+                14 => BlockResetInternal::<BLOCK_SIZE, SKIP, 14>::reset(block),
+                15 => BlockResetInternal::<BLOCK_SIZE, SKIP, 15>::reset(block),
                 _ => debug_assert!(block_mod < 8, "should not be here"),
             }
 
