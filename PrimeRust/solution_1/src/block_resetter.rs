@@ -13,10 +13,29 @@ const fn single_bit_mask(index: usize, start: usize, skip: usize, bit: usize) ->
     !(should_reset(index, start, skip) << bit)
 }
 
+const fn mask_set<const SKIP: usize>(block_mod: usize, block_size: usize) -> [[u8; U8_BITS]; SKIP] {
+    let mut mask_set = [[0u8; U8_BITS]; SKIP];
+    let mut word_idx = 0;
+    while word_idx < SKIP {
+        let mut bit = 0;
+        while bit < 8 {
+            let block_index_offset = block_mod * block_size * U8_BITS;
+            let start = SKIP / 2 + SKIP;
+            let bit_index_offset = bit * block_size;
+            let index = block_index_offset + bit_index_offset + word_idx;
+            mask_set[word_idx][bit] = single_bit_mask(index, start, SKIP, bit);
+            bit += 1;
+        }
+        word_idx += 1;
+    }
+    mask_set
+}
+
 pub struct BlockResetter<const BLOCK_SIZE: usize, const SKIP: usize>();
 const U8_BITS: usize = u8::BITS as usize;
 
 impl<const BLOCK_SIZE: usize, const SKIP: usize> BlockResetter<BLOCK_SIZE, SKIP> {
+    
     pub fn reset_flags_dense(blocks: &mut [[u8; BLOCK_SIZE]]) {
         // earliest start to avoid resetting the factor itself
         let start = SKIP / 2 + SKIP;
@@ -24,14 +43,11 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize> BlockResetter<BLOCK_SIZE, SKIP>
             start < BLOCK_SIZE,
             "algorithm only correct for small skip factors"
         );
-        debug_assert!(
-            SKIP < 15,
-            "algorithm only configured for skips of up to 15"
-        );
+        debug_assert!(SKIP < 15, "algorithm only configured for skips of up to 15");
         for (block_idx, block) in blocks.iter_mut().enumerate() {
             // The pattern of bits repeat with a cadence of SKIP. So, for a factor
             // of 7, blocks 0 and 7 have the same pattern. This means that we can
-            // use the same specialised function for blocks 0 and 7. 
+            // use the same specialised function for blocks 0 and 7.
             let block_mod = block_idx % SKIP;
             match block_mod {
                 0 => BlockResetInternal::<BLOCK_SIZE, SKIP, 0>::reset(block),
@@ -65,27 +81,30 @@ struct BlockResetInternal<const BLOCK_SIZE: usize, const SKIP: usize, const BLOC
 impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
     BlockResetInternal<BLOCK_SIZE, SKIP, BLOCK_MOD>
 {
+    const MASK_SET: [[u8; U8_BITS]; SKIP] = mask_set(BLOCK_MOD, BLOCK_SIZE);
+
     pub fn reset(block: &mut [u8]) {
-        // Calculate the masks we're going to apply first. Note that each mask
-        // will reset only a single bit, which is why we have 8 separate masks.
-        // Note that we _could_ calculate a single mask word and apply it in a
-        // single operation, but I believe that would be against the rules as
-        // we would be resetting multiple bits in one operation if we did that.
-        let mut mask_set = [[0u8; U8_BITS]; SKIP];
-        for word_idx in 0..SKIP {
-            for bit in 0..8 {
-                let block_index_offset = BLOCK_MOD * BLOCK_SIZE * U8_BITS;
-                let start = SKIP / 2 + SKIP;
-                let bit_index_offset = bit * BLOCK_SIZE;
-                let index = block_index_offset + bit_index_offset + word_idx;
-                mask_set[word_idx][bit] = single_bit_mask(index, start, SKIP, bit);
-            }
-        }
-        // rebind as immutable
-        let mask_set = mask_set;
+        // // Calculate the masks we're going to apply first. Note that each mask
+        // // will reset only a single bit, which is why we have 8 separate masks.
+        // // Note that we _could_ calculate a single mask word and apply it in a
+        // // single operation, but I believe that would be against the rules as
+        // // we would be resetting multiple bits in one operation if we did that.
+        // let mut mask_set = [[0u8; U8_BITS]; SKIP];
+        // for word_idx in 0..SKIP {
+        //     for bit in 0..8 {
+        //         let block_index_offset = BLOCK_MOD * BLOCK_SIZE * U8_BITS;
+        //         let start = SKIP / 2 + SKIP;
+        //         let bit_index_offset = bit * BLOCK_SIZE;
+        //         let index = block_index_offset + bit_index_offset + word_idx;
+        //         mask_set[word_idx][bit] = single_bit_mask(index, start, SKIP, bit);
+        //     }
+        // }
+        // // rebind as immutable
+        // let mask_set = mask_set;
 
         /// apply all 8 masks - one for each bit - using a fold, mostly
         /// because folds are fun
+        #[inline(always)]
         fn apply_masks(word: &mut u8, masks: &[u8; U8_BITS]) {
             *word = masks.iter().fold(*word, |w, mask| w & mask);
         }
@@ -95,7 +114,7 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
         block.chunks_exact_mut(SKIP).for_each(|words| {
             words
                 .iter_mut()
-                .zip(mask_set.iter().copied())
+                .zip(Self::MASK_SET.iter().copied())
                 .for_each(|(word, masks)| {
                     apply_masks(word, &masks);
                 });
@@ -106,7 +125,7 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
             .chunks_exact_mut(SKIP)
             .into_remainder()
             .iter_mut()
-            .zip(mask_set.iter().copied())
+            .zip(Self::MASK_SET.iter().copied())
             .for_each(|(word, masks)| {
                 apply_masks(word, &masks);
             });
