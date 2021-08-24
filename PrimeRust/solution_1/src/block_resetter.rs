@@ -24,17 +24,11 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize> BlockResetter<BLOCK_SIZE, SKIP>
             start < BLOCK_SIZE,
             "algorithm only correct for small skip factors"
         );
+        debug_assert!(
+            SKIP < 15,
+            "algorithm only configured for skips of up to 15"
+        );
         for (block_idx, block) in blocks.iter_mut().enumerate() {
-            // Preserve the first bit of one word we know we're going to overwrite
-            // with the masks. Its cheaper to put it back afterwards than break the loop
-            // into two sections with different rules. Only applicable on the first block:
-            // this is the factor itself, and we don't want to reset that flag.
-            let preserved_word_mask = if block_idx == 0 {
-                block[SKIP / 2] & 1
-            } else {
-                0
-            };
-
             // The pattern of bits repeat with a cadence of SKIP. So, for a factor
             // of 7, blocks 0 and 7 have the same pattern. This means that we can
             // use the same specialised function for blocks 0 and 7. 
@@ -59,10 +53,9 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize> BlockResetter<BLOCK_SIZE, SKIP>
                 _ => debug_assert!(block_mod < 8, "should not be here"),
             }
 
-            // restore the first bit on the preserved word in the first block,
-            // as noted above
+            // Restore the bit for the factor itself, as we have clobbered it.
             if block_idx == 0 {
-                block[SKIP / 2] |= preserved_word_mask;
+                block[SKIP / 2] |= 1;
             }
         }
     }
