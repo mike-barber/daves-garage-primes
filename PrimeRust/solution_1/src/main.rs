@@ -18,12 +18,13 @@ mod patterns;
 mod unrolled8;
 mod unrolled32;
 mod unrolled64;
+mod block_resetter;
 
 
 pub mod primes {
     use std::{collections::HashMap, time::Duration, usize};
 
-    use crate::flag_storage::FlagStorage;
+    use crate::{block_resetter::BlockResetter, flag_storage::FlagStorage};
 
     /// Shorthand for the `u8` bit count to avoid additional conversions.
     const U8_BITS: usize = u8::BITS as usize;
@@ -544,10 +545,14 @@ pub mod primes {
                     // that, we're expecting the resets to be sparse.
                     // We only get called for odd skip factors, so there's
                     // no point adding cases for even numbers.
-                    1 => self.reset_flags_dense::<1>(),
-                    3 => self.reset_flags_dense::<3>(),
-                    5 => self.reset_flags_dense::<5>(),
-                    7 => self.reset_flags_dense::<7>(),
+                    // 1 => self.reset_flags_dense::<1>(),
+                    // 3 => self.reset_flags_dense::<3>(),
+                    // 5 => self.reset_flags_dense::<5>(),
+                    // 7 => self.reset_flags_dense::<7>(),
+                    1 => BlockResetter::<BLOCK_SIZE, 1>::reset_flags_dense(&mut self.blocks),
+                    3 => BlockResetter::<BLOCK_SIZE, 3>::reset_flags_dense(&mut self.blocks),
+                    5 => BlockResetter::<BLOCK_SIZE, 5>::reset_flags_dense(&mut self.blocks),
+                    7 => BlockResetter::<BLOCK_SIZE, 7>::reset_flags_dense(&mut self.blocks),
                     _ => self.reset_flags_general(skip),
                 }
             } else {
