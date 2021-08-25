@@ -555,6 +555,8 @@ pub mod primes {
                     7 => BlockResetter::<BLOCK_SIZE, 7>::reset_flags_dense(&mut self.blocks),
                     9 => BlockResetter::<BLOCK_SIZE, 9>::reset_flags_dense(&mut self.blocks),
                     11 => BlockResetter::<BLOCK_SIZE, 11>::reset_flags_dense(&mut self.blocks),
+                    13 => BlockResetter::<BLOCK_SIZE, 13>::reset_flags_dense(&mut self.blocks),
+                    15 => BlockResetter::<BLOCK_SIZE, 15>::reset_flags_dense(&mut self.blocks),
                     _ => self.reset_flags_general(skip),
                 }
             } else {

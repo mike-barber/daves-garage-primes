@@ -124,6 +124,7 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
     const MASK14: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 14);
     const MASK15: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 15);
 
+    #[inline(never)]
     pub fn reset(block: &mut [u8]) {
         // // Calculate the masks we're going to apply first. Note that each mask
         // // will reset only a single bit, which is why we have 8 separate masks.
@@ -250,52 +251,52 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
 
         block.chunks_exact_mut(SKIP).for_each(|words| {
             if 0 < SKIP {
-                apply_masks(&mut words[0], Self::MASK0);
+                Self::MASK0.iter().for_each(|m| words[0] &= m);
             }
             if 1 < SKIP {
-                apply_masks(&mut words[1], Self::MASK1);
+                Self::MASK1.iter().for_each(|m| words[1] &= m);
             }
             if 2 < SKIP {
-                apply_masks(&mut words[2], Self::MASK2);
+                Self::MASK2.iter().for_each(|m| words[2] &= m);
             }
             if 3 < SKIP {
-                apply_masks(&mut words[3], Self::MASK3);
+                Self::MASK3.iter().for_each(|m| words[3] &= m);
             }
             if 4 < SKIP {
-                apply_masks(&mut words[4], Self::MASK4);
+                Self::MASK4.iter().for_each(|m| words[4] &= m);
             }
             if 5 < SKIP {
-                apply_masks(&mut words[5], Self::MASK5);
+                Self::MASK5.iter().for_each(|m| words[5] &= m);
             }
             if 6 < SKIP {
-                apply_masks(&mut words[6], Self::MASK6);
+                Self::MASK6.iter().for_each(|m| words[6] &= m);
             }
             if 7 < SKIP {
-                apply_masks(&mut words[7], Self::MASK7);
+                Self::MASK7.iter().for_each(|m| words[7] &= m);
             }
             if 8 < SKIP {
-                apply_masks(&mut words[8], Self::MASK8);
+                Self::MASK8.iter().for_each(|m| words[8] &= m);
             }
             if 9 < SKIP {
-                apply_masks(&mut words[9], Self::MASK9);
+                Self::MASK9.iter().for_each(|m| words[9] &= m);
             }
             if 10 < SKIP {
-                apply_masks(&mut words[10], Self::MASK10);
+                Self::MASK10.iter().for_each(|m| words[10] &= m);
             }
             if 11 < SKIP {
-                apply_masks(&mut words[11], Self::MASK11);
+                Self::MASK11.iter().for_each(|m| words[11] &= m);
             }
             if 12 < SKIP {
-                apply_masks(&mut words[12], Self::MASK12);
+                Self::MASK12.iter().for_each(|m| words[12] &= m);
             }
             if 13 < SKIP {
-                apply_masks(&mut words[13], Self::MASK13);
+                Self::MASK13.iter().for_each(|m| words[13] &= m);
             }
             if 14 < SKIP {
-                apply_masks(&mut words[14], Self::MASK14);
+                Self::MASK14.iter().for_each(|m| words[14] &= m);
             }
             if 15 < SKIP {
-                apply_masks(&mut words[15], Self::MASK15);
+                Self::MASK15.iter().for_each(|m| words[15] &= m);
             }
         });
 

@@ -1,4 +1,6 @@
 #!/bin/bash
 
 cargo build --release
-perf record target/release/prime-sieve-rust -t 1 --bits-unrolled -s 15
+#perf record target/release/prime-sieve-rust -t 1 --bits-unrolled -s 15
+perf record target/release/prime-sieve-rust -t 1 --bits-striped-hybrid -s 15
+
