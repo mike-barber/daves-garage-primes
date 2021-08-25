@@ -107,6 +107,23 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
 {
     const MASK_SETS: [[u8; U8_BITS]; SKIP] = mask_sets(BLOCK_MOD, BLOCK_SIZE);
 
+    const MASK0: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 0);
+    const MASK1: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 1);
+    const MASK2: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 2);
+    const MASK3: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 3);
+    const MASK4: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 4);
+    const MASK5: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 5);
+    const MASK6: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 6);
+    const MASK7: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 7);
+    const MASK8: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 8);
+    const MASK9: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 9);
+    const MASK10: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 10);
+    const MASK11: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 11);
+    const MASK12: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 12);
+    const MASK13: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 13);
+    const MASK14: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 14);
+    const MASK15: [u8; U8_BITS] = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, 15);
+
     pub fn reset(block: &mut [u8]) {
         // // Calculate the masks we're going to apply first. Note that each mask
         // // will reset only a single bit, which is why we have 8 separate masks.
@@ -129,8 +146,21 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
         /// apply all 8 masks - one for each bit - using a fold, mostly
         /// because folds are fun
         #[inline(always)]
-        fn apply_masks(word: &mut u8, masks: &[u8; U8_BITS]) {
-            *word = masks.iter().fold(*word, |w, mask| w & mask);
+        fn apply_masks(word: &mut u8, masks: [u8; U8_BITS]) {
+            //*word = masks.iter().fold(*word, |w, mask| w & mask);
+            // let mut w = *word;
+            // w &= masks[0];
+            // w &= masks[1];
+            // w &= masks[2];
+            // w &= masks[3];
+            // w &= masks[4];
+            // w &= masks[5];
+            // w &= masks[6];
+            // w &= masks[7];
+            // *word = w;
+            let mut w = *word;
+            masks.iter().for_each(|m| w &= m);
+            *word = w;
         }
 
         // // run through all exact `SKIP` size chunks - the compiler is able to
@@ -144,27 +174,129 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
         //         });
         // });
 
-        // run through all exact `SKIP` size chunks - the compiler is able to
-        // optimise known sizes quite well.
+        // // run through all exact `SKIP` size chunks - the compiler is able to
+        // // optimise known sizes quite well.
+        // block.chunks_exact_mut(SKIP).for_each(|words| {
+        //     words.iter_mut().enumerate().for_each(|(word_idx, word)| {
+        //         //let single_bit_masks = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, word_idx);
+        //         let single_bit_masks = &Self::MASK_SETS[word_idx];
+        //         *word &= single_bit_masks[0];
+        //         *word &= single_bit_masks[1];
+        //         *word &= single_bit_masks[2];
+        //         *word &= single_bit_masks[3];
+        //         *word &= single_bit_masks[4];
+        //         *word &= single_bit_masks[5];
+        //         *word &= single_bit_masks[6];
+        //         *word &= single_bit_masks[7];
+        //     })
+        //     // words
+        //     //     .iter_mut()
+        //     //     .zip(Self::MASK_SET.iter().copied())
+        //     //     .for_each(|(word, masks)| {
+        //     //         apply_masks(word, &masks);
+        //     //     });
+        // });
+
+        // block.chunks_exact_mut(SKIP).for_each(|words| {
+        //     if 0 < SKIP {
+        //         apply_masks(&mut words[0], Self::MASK_SETS[0]);
+        //     }
+        //     if 1 < SKIP {
+        //         apply_masks(&mut words[1], Self::MASK_SETS[1]);
+        //     }
+        //     if 2 < SKIP {
+        //         apply_masks(&mut words[2], Self::MASK_SETS[2]);
+        //     }
+        //     if 3 < SKIP {
+        //         apply_masks(&mut words[3], Self::MASK_SETS[3]);
+        //     }
+        //     if 4 < SKIP {
+        //         apply_masks(&mut words[4], Self::MASK_SETS[4]);
+        //     }
+        //     if 5 < SKIP {
+        //         apply_masks(&mut words[5], Self::MASK_SETS[5]);
+        //     }
+        //     if 6 < SKIP {
+        //         apply_masks(&mut words[6], Self::MASK_SETS[6]);
+        //     }
+        //     if 7 < SKIP {
+        //         apply_masks(&mut words[7], Self::MASK_SETS[7]);
+        //     }
+        //     if 8 < SKIP {
+        //         apply_masks(&mut words[8], Self::MASK_SETS[8]);
+        //     }
+        //     if 9 < SKIP {
+        //         apply_masks(&mut words[9], Self::MASK_SETS[9]);
+        //     }
+        //     if 10 < SKIP {
+        //         apply_masks(&mut words[10], Self::MASK_SETS[10]);
+        //     }
+        //     if 11 < SKIP {
+        //         apply_masks(&mut words[11], Self::MASK_SETS[11]);
+        //     }
+        //     if 12 < SKIP {
+        //         apply_masks(&mut words[12], Self::MASK_SETS[12]);
+        //     }
+        //     if 13 < SKIP {
+        //         apply_masks(&mut words[13], Self::MASK_SETS[13]);
+        //     }
+        //     if 14 < SKIP {
+        //         apply_masks(&mut words[14], Self::MASK_SETS[14]);
+        //     }
+        //     if 15 < SKIP {
+        //         apply_masks(&mut words[15], Self::MASK_SETS[15]);
+        //     }
+        // });
+
         block.chunks_exact_mut(SKIP).for_each(|words| {
-            words.iter_mut().enumerate().for_each(|(word_idx, word)| {
-                //let single_bit_masks = mask_set(BLOCK_MOD, BLOCK_SIZE, SKIP, word_idx);
-                let single_bit_masks = &Self::MASK_SETS[word_idx];
-                *word &= single_bit_masks[0];
-                *word &= single_bit_masks[1];
-                *word &= single_bit_masks[2];
-                *word &= single_bit_masks[3];
-                *word &= single_bit_masks[4];
-                *word &= single_bit_masks[5];
-                *word &= single_bit_masks[6];
-                *word &= single_bit_masks[7];
-            })
-            // words
-            //     .iter_mut()
-            //     .zip(Self::MASK_SET.iter().copied())
-            //     .for_each(|(word, masks)| {
-            //         apply_masks(word, &masks);
-            //     });
+            if 0 < SKIP {
+                apply_masks(&mut words[0], Self::MASK0);
+            }
+            if 1 < SKIP {
+                apply_masks(&mut words[1], Self::MASK1);
+            }
+            if 2 < SKIP {
+                apply_masks(&mut words[2], Self::MASK2);
+            }
+            if 3 < SKIP {
+                apply_masks(&mut words[3], Self::MASK3);
+            }
+            if 4 < SKIP {
+                apply_masks(&mut words[4], Self::MASK4);
+            }
+            if 5 < SKIP {
+                apply_masks(&mut words[5], Self::MASK5);
+            }
+            if 6 < SKIP {
+                apply_masks(&mut words[6], Self::MASK6);
+            }
+            if 7 < SKIP {
+                apply_masks(&mut words[7], Self::MASK7);
+            }
+            if 8 < SKIP {
+                apply_masks(&mut words[8], Self::MASK8);
+            }
+            if 9 < SKIP {
+                apply_masks(&mut words[9], Self::MASK9);
+            }
+            if 10 < SKIP {
+                apply_masks(&mut words[10], Self::MASK10);
+            }
+            if 11 < SKIP {
+                apply_masks(&mut words[11], Self::MASK11);
+            }
+            if 12 < SKIP {
+                apply_masks(&mut words[12], Self::MASK12);
+            }
+            if 13 < SKIP {
+                apply_masks(&mut words[13], Self::MASK13);
+            }
+            if 14 < SKIP {
+                apply_masks(&mut words[14], Self::MASK14);
+            }
+            if 15 < SKIP {
+                apply_masks(&mut words[15], Self::MASK15);
+            }
         });
 
         // run through the remaining stub of fewer than SKIP items
@@ -174,7 +306,7 @@ impl<const BLOCK_SIZE: usize, const SKIP: usize, const BLOCK_MOD: usize>
             .iter_mut()
             .zip(Self::MASK_SETS.iter().copied())
             .for_each(|(word, masks)| {
-                apply_masks(word, &masks);
+                apply_masks(word, masks);
             });
     }
 }
