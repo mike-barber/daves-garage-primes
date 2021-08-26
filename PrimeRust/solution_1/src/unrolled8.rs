@@ -12,13 +12,13 @@ fn cast_slice_mut_u64_u8(words: &mut [u64]) -> &mut [u8] {
 }
 
 pub struct FlagStorageUnrolledBits8 {
-    words: Vec<u64>,
+    words: Vec<u32>,
     length_bits: usize,
 }
 
 impl FlagStorageUnrolledBits8 {
     // TODO: consider inlining
-    #[inline(never)]
+    #[inline(always)]
     fn reset_flags_sparse<const EQUIVALENT_SKIP: usize>(&mut self, skip: usize) {
         //let mask_set_index = ((EQUIVALENT_SKIP / 2) - 1) % 8;
         //let mask_set = MASK_PATTERNS_U8[mask_set_index];
@@ -26,7 +26,7 @@ impl FlagStorageUnrolledBits8 {
         let relative_indices = crate::patterns::index_pattern::<8>(skip);
         
         // cast our u32 vector to bytes
-        let bytes_slice: &mut [u8] = cast_slice_mut_u64_u8(&mut self.words);
+        let bytes_slice: &mut [u8] = cast_slice_mut_u32_u8(&mut self.words);
         bytes_slice.chunks_exact_mut(skip).for_each(|chunk| {
             for i in 0..8 {
                 let word_idx = relative_indices[i];
@@ -62,7 +62,7 @@ impl FlagStorageUnrolledBits8 {
 
 impl FlagStorage for FlagStorageUnrolledBits8 {
     fn create_true(size: usize) -> Self {
-        let num_words = size / 64 + (size % 64).min(1);
+        let num_words = size / 32 + (size % 32).min(1);
         Self {
             words: vec![0; num_words],
             length_bits: size,
@@ -74,38 +74,38 @@ impl FlagStorage for FlagStorageUnrolledBits8 {
         // call into dispatcher
         // TODO: autogenerate match_reset_dispatch!(self, skip, 19, reset_flags_dense, reset_flags_sparse);
         match skip {
-            3 => ResetterDenseU64::<3>::reset_dense(&mut self.words),
-            5 => ResetterDenseU64::<5>::reset_dense(&mut self.words),
-            7 => ResetterDenseU64::<7>::reset_dense(&mut self.words),
-            9 => ResetterDenseU64::<9>::reset_dense(&mut self.words),
-            11 => ResetterDenseU64::<11>::reset_dense(&mut self.words),
-            13 => ResetterDenseU64::<13>::reset_dense(&mut self.words),
-            15 => ResetterDenseU64::<15>::reset_dense(&mut self.words),
-            17 => ResetterDenseU64::<17>::reset_dense(&mut self.words),
-            19 => ResetterDenseU64::<19>::reset_dense(&mut self.words),
-            21 => ResetterDenseU64::<21>::reset_dense(&mut self.words),
-            23 => ResetterDenseU64::<23>::reset_dense(&mut self.words),
-            25 => ResetterDenseU64::<25>::reset_dense(&mut self.words),
-            27 => ResetterDenseU64::<27>::reset_dense(&mut self.words),
-            29 => ResetterDenseU64::<29>::reset_dense(&mut self.words),
-            31 => ResetterDenseU64::<31>::reset_dense(&mut self.words),
-            33 => ResetterDenseU64::<33>::reset_dense(&mut self.words),
-            35 => ResetterDenseU64::<35>::reset_dense(&mut self.words),
-            37 => ResetterDenseU64::<37>::reset_dense(&mut self.words),
-            39 => ResetterDenseU64::<39>::reset_dense(&mut self.words),
-            41 => ResetterDenseU64::<41>::reset_dense(&mut self.words),
-            43 => ResetterDenseU64::<43>::reset_dense(&mut self.words),
-            45 => ResetterDenseU64::<45>::reset_dense(&mut self.words),
-            47 => ResetterDenseU64::<47>::reset_dense(&mut self.words),
-            49 => ResetterDenseU64::<49>::reset_dense(&mut self.words),
-            51 => ResetterDenseU64::<51>::reset_dense(&mut self.words),
-            53 => ResetterDenseU64::<53>::reset_dense(&mut self.words),
-            55 => ResetterDenseU64::<55>::reset_dense(&mut self.words),
-            57 => ResetterDenseU64::<57>::reset_dense(&mut self.words),
-            59 => ResetterDenseU64::<59>::reset_dense(&mut self.words),
-            61 => ResetterDenseU64::<61>::reset_dense(&mut self.words),
-            63 => ResetterDenseU64::<63>::reset_dense(&mut self.words),
-            65 => ResetterDenseU64::<65>::reset_dense(&mut self.words),
+            3 =>  ResetterDenseU32::<3>::reset_dense(&mut self.words),
+            5 =>  ResetterDenseU32::<5>::reset_dense(&mut self.words),
+            7 =>  ResetterDenseU32::<7>::reset_dense(&mut self.words),
+            9 =>  ResetterDenseU32::<9>::reset_dense(&mut self.words),
+            11 => ResetterDenseU32::<11>::reset_dense(&mut self.words),
+            13 => ResetterDenseU32::<13>::reset_dense(&mut self.words),
+            15 => ResetterDenseU32::<15>::reset_dense(&mut self.words),
+            17 => ResetterDenseU32::<17>::reset_dense(&mut self.words),
+            19 => ResetterDenseU32::<19>::reset_dense(&mut self.words),
+            21 => ResetterDenseU32::<21>::reset_dense(&mut self.words),
+            23 => ResetterDenseU32::<23>::reset_dense(&mut self.words),
+            25 => ResetterDenseU32::<25>::reset_dense(&mut self.words),
+            27 => ResetterDenseU32::<27>::reset_dense(&mut self.words),
+            29 => ResetterDenseU32::<29>::reset_dense(&mut self.words),
+            31 => ResetterDenseU32::<31>::reset_dense(&mut self.words),
+            33 => ResetterDenseU32::<33>::reset_dense(&mut self.words),
+            35 => ResetterDenseU32::<35>::reset_dense(&mut self.words),
+            37 => ResetterDenseU32::<37>::reset_dense(&mut self.words),
+            39 => ResetterDenseU32::<39>::reset_dense(&mut self.words),
+            41 => ResetterDenseU32::<41>::reset_dense(&mut self.words),
+            43 => ResetterDenseU32::<43>::reset_dense(&mut self.words),
+            45 => ResetterDenseU32::<45>::reset_dense(&mut self.words),
+            47 => ResetterDenseU32::<47>::reset_dense(&mut self.words),
+            49 => ResetterDenseU32::<49>::reset_dense(&mut self.words),
+            51 => ResetterDenseU32::<51>::reset_dense(&mut self.words),
+            53 => ResetterDenseU32::<53>::reset_dense(&mut self.words),
+            55 => ResetterDenseU32::<55>::reset_dense(&mut self.words),
+            57 => ResetterDenseU32::<57>::reset_dense(&mut self.words),
+            59 => ResetterDenseU32::<59>::reset_dense(&mut self.words),
+            61 => ResetterDenseU32::<61>::reset_dense(&mut self.words),
+            63 => ResetterDenseU32::<63>::reset_dense(&mut self.words),
+            65 => ResetterDenseU32::<65>::reset_dense(&mut self.words),
             skip_sparse => match ((skip_sparse / 2) - 1) % 8 {
                 // TODO: this needs a clean up; we're doing unnecessary conversions
                 0 => self.reset_flags_sparse::<3>(skip),
@@ -126,7 +126,7 @@ impl FlagStorage for FlagStorageUnrolledBits8 {
         if index >= self.length_bits {
             return false;
         }
-        let word = self.words.get(index / 64).unwrap();
-        *word & (1 << (index % 64)) == 0
+        let word = self.words.get(index / 32).unwrap();
+        *word & (1 << (index % 32)) == 0
     }
 }
