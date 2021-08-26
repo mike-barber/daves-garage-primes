@@ -2,7 +2,7 @@ use helper_macros::generic_dispatch;
 
 use crate::{primes::FlagStorage, unrolled::patterns::pattern_equivalent_skip};
 
-use self::patterns::{index_pattern, mask_pattern_set_u64, mask_pattern_set_u8};
+use self::patterns::{index_pattern, mask_pattern_set_u16, mask_pattern_set_u64, mask_pattern_set_u8};
 
 mod patterns {
 
@@ -51,6 +51,17 @@ mod patterns {
         masks
     }
 
+    pub const fn mask_pattern_set_u16(skip: usize) -> [u16; 16] {
+        let mod_pattern = modulo_pattern::<16>(skip);
+        let mut masks = [0; 16];
+        let mut i = 0;
+        while i < 16 {
+            masks[i] = 1u16 << mod_pattern[i];
+            i += 1;
+        }
+        masks
+    }
+
     /// Produces a set of masks based on [`modulo_pattern`]. It's simply
     /// the bit address shifted left into the correct position. This produces
     /// a set of 64 single-bit masks for u64 words.
@@ -80,6 +91,10 @@ mod patterns {
 /// we're casting from a wider type to a narrower one.
 fn reinterpret_slice_mut_u64_u8(words: &mut [u64]) -> &mut [u8] {
     unsafe { std::slice::from_raw_parts_mut(words.as_mut_ptr() as *mut u8, words.len() * 8) }
+}
+
+fn reinterpret_slice_mut_u64_u16(words: &mut [u64]) -> &mut [u16] {
+    unsafe { std::slice::from_raw_parts_mut(words.as_mut_ptr() as *mut u16, words.len() * 4) }
 }
 
 /// Storage structure implementing standard linear bit storage, but with a hybrid bit setting strategy:
@@ -130,6 +145,32 @@ impl FlagStorage for FlagStorageUnrolledHybrid {
     #[inline(always)]
     fn reset_flags(&mut self, skip: usize) {
         // dense resets for all odd numbers in {3, 5, ... =65}
+        // generic_dispatch!(
+        //     skip,
+        //     3,
+        //     2,
+        //     129, // 64 unique sets
+        //     ResetterDenseU64::<N>::reset_dense(&mut self.words),
+        //     {
+        //         // fallback to sparse resetter, and dispatch to the correct one
+        //         // given the equivalent skip
+        //         let equivalent_skip = pattern_equivalent_skip(skip, 8);
+        //         generic_dispatch!(
+        //             equivalent_skip,
+        //             3,
+        //             2,
+        //             17,
+        //             ResetterSparseU8::<N>::reset_sparse(&mut self.words, skip),
+        //             debug_assert!(
+        //                 false,
+        //                 "this case should not occur skip {} equivalent {}",
+        //                 skip, equivalent_skip
+        //             )
+        //         );
+        //     }
+        // );
+
+        // dense resets for all odd numbers in {3, 5, ... =65}
         generic_dispatch!(
             skip,
             3,
@@ -139,13 +180,13 @@ impl FlagStorage for FlagStorageUnrolledHybrid {
             {
                 // fallback to sparse resetter, and dispatch to the correct one
                 // given the equivalent skip
-                let equivalent_skip = pattern_equivalent_skip(skip, 8);
+                let equivalent_skip = pattern_equivalent_skip(skip, 16);
                 generic_dispatch!(
                     equivalent_skip,
                     3,
                     2,
-                    17,
-                    ResetterSparseU8::<N>::reset_sparse(&mut self.words, skip),
+                    33,
+                    ResetterSparseU16::<N>::reset_sparse(&mut self.words, skip),
                     debug_assert!(
                         false,
                         "this case should not occur skip {} equivalent {}",
@@ -264,6 +305,51 @@ impl<const EQUIVALENT_SKIP: usize> ResetterSparseU8<EQUIVALENT_SKIP> {
         let factor_index = skip / 2;
         let factor_word = factor_index / 8;
         let factor_bit = factor_index % 8;
+        if let Some(w) = bytes_slice.get_mut(factor_word) {
+            *w &= !(1 << factor_bit);
+        }
+    }
+}
+
+pub struct ResetterSparseU16<const EQUIVALENT_SKIP: usize>();
+impl<const EQUIVALENT_SKIP: usize> ResetterSparseU16<EQUIVALENT_SKIP> {
+    const SINGLE_BIT_MASK_SET: [u16; 16] = mask_pattern_set_u16(EQUIVALENT_SKIP);
+
+    #[inline(never)]
+    fn reset_sparse(words: &mut [u64], skip: usize) {
+        let relative_indices = index_pattern::<16>(skip);
+
+        // cast our wide word vector to bytes
+        let bytes_slice: &mut [u16] = reinterpret_slice_mut_u64_u16(words);
+        bytes_slice.chunks_exact_mut(skip).for_each(|chunk| {
+            #[allow(clippy::needless_range_loop)]
+            for i in 0..16 {
+                let word_idx = relative_indices[i];
+                // Safety: relative indices are all smaller than `skip` by construction
+                unsafe {
+                    *chunk.get_unchecked_mut(word_idx) |= Self::SINGLE_BIT_MASK_SET[i];
+                }
+            }
+        });
+
+        let remainder = bytes_slice.chunks_exact_mut(skip).into_remainder();
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..16 {
+            let word_idx = relative_indices[i];
+            if word_idx < remainder.len() {
+                // Safety: check above breaks the loop before we exceed remainder.len()
+                unsafe {
+                    *remainder.get_unchecked_mut(word_idx) |= Self::SINGLE_BIT_MASK_SET[i];
+                }
+            } else {
+                break;
+            }
+        }
+
+        // restore original factor bit -- we have clobbered it, and it is the prime
+        let factor_index = skip / 2;
+        let factor_word = factor_index / 16;
+        let factor_bit = factor_index % 16;
         if let Some(w) = bytes_slice.get_mut(factor_word) {
             *w &= !(1 << factor_bit);
         }
